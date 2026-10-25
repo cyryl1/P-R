@@ -3,3 +3,9 @@ node_modules/
 **/dist/
 coverage/
 .env
+
+# AI assistant instruction files
+**/AGENTS.md
+**/CLAUDE.md
+**/CODEX.md
+**/GEMINI.md
