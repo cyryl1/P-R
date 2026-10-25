@@ -1,0 +1,51 @@
+version: 1
+repo: acme/payments-api
+enabled: true
+
+triggers:
+  on_review_request: auto
+  on_new_commits: notify
+  skip_drafts: true
+
+review:
+  focus:
+    security: strict
+    correctness: strict
+    performance: normal
+    readability: light
+    style: off
+  tone: "Concise. Suggest a fix, not just the problem."
+  max_comments: 10
+  min_severity: minor
+  ignore_paths: ["**/*.lock", "docs/**", "generated/**"]
+  context_files: ["CONTRIBUTING.md", "src/middleware/auth.ts"]
+  instructions: |
+    We use Result types, never throw in services.
+    Money is always integer minor units.
+
+rules:
+  - id: auth-on-endpoints
+    type: llm
+    description: Every new HTTP endpoint uses the requireAuth middleware.
+    severity: blocker
+    paths: ["src/routes/**"]
+  - id: tests-for-logic
+    type: require_tests
+    when_paths: ["src/**/*.ts"]
+    test_paths: ["**/*.test.ts", "tests/**"]
+    severity: major
+  - id: pr-size
+    type: max_changed_lines
+    limit: 600
+    severity: minor
+  - id: no-env-files
+    type: forbid_paths
+    paths: [".env*", "**/*.pem"]
+    severity: blocker
+  - id: has-description
+    type: require_description
+    min_length: 30
+    severity: minor
+  - id: linked-issue
+    type: require_linked_issue
+    severity: nit
