@@ -1,0 +1,17 @@
+{
+  "$ref": "#/definitions/ReviewOutput",
+  "definitions": {
+    "ReviewOutput": {
+      "type": "object",
+      "properties": {
+        "summary": { "type": "string", "minLength": 1 },
+        "verdict": { "type": "string", "enum": ["COMMENT", "APPROVE", "REQUEST_CHANGES"] },
+        "comments": { "type": "array", "items": { "type": "object", "properties": { "path": { "type": "string" }, "line": { "type": "integer", "exclusiveMinimum": 0 }, "side": { "type": "string", "enum": ["RIGHT", "LEFT"] }, "severity": { "type": "string", "enum": ["blocker", "major", "minor", "nit"] }, "ruleId": { "type": "string" }, "body": { "type": "string", "minLength": 1 }, "suggestion": { "type": "string" } }, "required": ["path", "line", "side", "severity", "body"], "additionalProperties": false } },
+        "ruleResults": { "type": "array", "items": { "type": "object", "properties": { "ruleId": { "type": "string" }, "status": { "type": "string", "enum": ["pass", "fail", "na", "unsure"] }, "note": { "type": "string" } }, "required": ["ruleId", "status", "note"], "additionalProperties": false } }
+      },
+      "required": ["summary", "verdict", "comments", "ruleResults"],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}
