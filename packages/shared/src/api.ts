@@ -32,7 +32,11 @@ export const ReviewOutputSchema = z.object({
 export const ApiSchemas = {
   health: { response: HealthResponseSchema }, settings: { response: AppConfigSchema, update: AppConfigSchema.deepPartial() },
   inbox: { response: z.array(InboxItemSchema) }, poll: { response: z.object({ started: z.literal(true) }) },
-  projects: { response: z.array(ProjectSummarySchema), document: RulesDocumentSchema, save: z.object({ yaml: z.string() }), validate: z.object({ yaml: z.string() }), templateQuery: z.object({ repo: z.string() }),
+  projects: {
+    response: z.array(ProjectSummarySchema), document: RulesDocumentSchema,
+    save: z.object({ yaml: z.string() }), validate: z.object({ yaml: z.string() }),
+    validateResponse: z.object({ valid: z.boolean(), errors: z.array(RulesErrorSchema), parsed: RulesFileSchema.optional() }),
+    templateQuery: z.object({ repo: z.string() }),
     params: z.object({ owner: z.string(), repo: z.string() }) },
   reviews: { listQuery: z.object({ status: ReviewStatusSchema.optional(), repo: z.string().optional(), limit: z.coerce.number().int().positive().max(100).optional(), cursor: z.string().optional() }), list: z.object({ items: z.array(ReviewSummarySchema), nextCursor: z.string().optional() }), create: z.object({ prUrl: z.string().url() }), summary: ReviewSummarySchema, detail: ReviewDetailSchema, params: z.object({ id: z.string() }), edit: z.object({ summary: z.string().optional(), verdict: VerdictSchema.optional() }),
     diff: z.array(DiffFileSchema), addComment: z.object({ path: z.string(), line: z.number().int().positive(), side: DiffSideSchema, body: z.string().min(1), severity: SeveritySchema }), editComment: z.object({ body: z.string().optional(), severity: SeveritySchema.optional(), included: z.boolean().optional(), suggestion: z.string().nullable().optional() }), commentParams: z.object({ id: z.string(), cid: z.string() }), publish: z.object({ mode: z.enum(['pending', 'submit']), event: z.enum(['APPROVE', 'REQUEST_CHANGES', 'COMMENT']).optional(), force: z.boolean().optional(), replacePending: z.boolean().optional() }), publishResponse: z.object({ status: ReviewStatusSchema, githubReviewUrl: z.string().url(), publishedComments: z.number().int().nonnegative(), foldedIntoSummary: z.number().int().nonnegative() }) },

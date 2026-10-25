@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RulesFileSchema, ReviewOutputJsonSchema, ReviewOutputSchema } from './index.js';
+import { ApiSchemas, RulesFileSchema, ReviewOutputJsonSchema, ReviewOutputSchema } from './index.js';
 import jsonSchema from '../review-output.schema.json' with { type: 'json' };
 
 describe('shared contract', () => {
@@ -17,5 +17,13 @@ describe('shared contract', () => {
   it('keeps the checked-in LLM JSON Schema in sync with ReviewOutput', () => {
     expect(ReviewOutputJsonSchema).toEqual(jsonSchema);
     expect(ReviewOutputSchema.safeParse({ summary: 'Looks good.', verdict: 'COMMENT', comments: [], ruleResults: [] }).success).toBe(true);
+  });
+
+  it('accepts parsed rules in the project validation response', () => {
+    expect(ApiSchemas.projects.validateResponse.safeParse({
+      valid: true,
+      errors: [],
+      parsed: { version: 1, repo: 'acme/billing', rules: [] },
+    }).success).toBe(true);
   });
 });
