@@ -54,7 +54,7 @@ describe('AppShell', () => {
     server.use(http.get('/api/health', () => HttpResponse.json(healthNoKey)));
     renderApp();
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'ANTHROPIC_API_KEY',
+      'OPENROUTER_API_KEY',
     );
   });
 

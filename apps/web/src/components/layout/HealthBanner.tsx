@@ -10,7 +10,7 @@ export function healthProblems(
     problems.push('`gh` is not logged in — run `gh auth login`');
   if (!health.llm.configured)
     problems.push(
-      'No API key — add ANTHROPIC_API_KEY to .env (reviews will use the mock provider)',
+      'No API key — add OPENROUTER_API_KEY to .env, or select the mock provider',
     );
   if (health.poller.lastError)
     problems.push(`Last poll failed: ${health.poller.lastError}`);

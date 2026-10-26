@@ -11,7 +11,7 @@ describe('Settings', () => {
     renderApp('/settings');
     expect(await screen.findByLabelText('Interval (minutes)')).toHaveValue(5);
     expect(screen.getByRole('textbox', { name: 'Model' })).toHaveValue(
-      'claude-sonnet-5-5',
+      'openrouter/free',
     );
     expect(await screen.findByText('Logged in as cyryl1')).toBeInTheDocument();
     expect(screen.getByText('Set')).toBeInTheDocument();
@@ -24,7 +24,7 @@ describe('Settings', () => {
     server.use(http.get('/api/health', () => HttpResponse.json(healthNoKey)));
     renderApp('/settings');
     expect(
-      await screen.findByText(/Not set — add ANTHROPIC_API_KEY/),
+      await screen.findByText(/Not set — add OPENROUTER_API_KEY/),
     ).toBeInTheDocument();
   });
 

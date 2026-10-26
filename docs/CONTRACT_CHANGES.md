@@ -13,3 +13,8 @@ _None pending._
 1. `POST /api/projects/validate` returns `{valid, errors, parsed?}`. The `parsed` rules file is present when validation succeeds. Added `ApiSchemas.projects.validateResponse`.
 2. `GET /api/projects/:owner/:repo` returns `404` with `NO_RULES` when no file exists. The backend route implements this behavior; the shared API error code already includes `NO_RULES`.
 3. Added the declared `GET /api/projects/template` response shape `{yaml}` to the shared contract so the backend can validate its output.
+
+### OpenRouter provider — 2026-10-26
+
+1. Replaced the `anthropic` provider enum value with `openrouter` in `AppConfig` and the health response. The default is now `{provider: openrouter, model: openrouter/free}`.
+2. Changed the LLM wire schema so optional comment fields are required nullable values. This makes `ReviewOutput` compatible with strict JSON Schema providers; Zod normalizes `null` back to omitted application fields.

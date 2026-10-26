@@ -8,7 +8,7 @@ const hints: Partial<Record<ErrorCode | 'NETWORK', string>> = {
   GH_NOT_AUTHENTICATED: 'Run `gh auth login`, then try again.',
   GH_RATE_LIMITED: 'GitHub is rate limiting requests. Wait a minute and retry.',
   LLM_NOT_CONFIGURED:
-    'Add ANTHROPIC_API_KEY to .env, or switch the provider to mock in Settings.',
+    'Add OPENROUTER_API_KEY to .env, or switch the provider to mock in Settings.',
 };
 
 export function errorMessage(error: unknown): string {
