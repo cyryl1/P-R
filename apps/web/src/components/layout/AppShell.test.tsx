@@ -21,13 +21,18 @@ describe('AppShell', () => {
   it('shows the sidebar routes and a placeholder page', async () => {
     renderApp('/history');
     const nav = screen.getByRole('navigation', { name: 'Main' });
-    for (const name of ['Inbox', 'Projects', 'History', 'Settings']) expect(nav).toHaveTextContent(name);
-    expect(await screen.findByRole('heading', { name: 'History' })).toBeInTheDocument();
+    for (const name of ['Inbox', 'Projects', 'History', 'Settings'])
+      expect(nav).toHaveTextContent(name);
+    expect(
+      await screen.findByRole('heading', { name: 'History' }),
+    ).toBeInTheDocument();
   });
 
   it('shows the poll indicator from /api/health', async () => {
     renderApp();
-    expect(await screen.findByText(/Last checked 2 min ago · Next in 3 min/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Last checked 2 min ago · Next in 3 min/),
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Check now/ })).toBeEnabled();
   });
 
@@ -38,7 +43,9 @@ describe('AppShell', () => {
   });
 
   it('shows the gh fix when gh is logged out', async () => {
-    server.use(http.get('/api/health', () => HttpResponse.json(healthGhLoggedOut)));
+    server.use(
+      http.get('/api/health', () => HttpResponse.json(healthGhLoggedOut)),
+    );
     renderApp();
     expect(await screen.findByRole('alert')).toHaveTextContent('gh auth login');
   });
@@ -46,12 +53,16 @@ describe('AppShell', () => {
   it('warns about the mock provider when no API key is set', async () => {
     server.use(http.get('/api/health', () => HttpResponse.json(healthNoKey)));
     renderApp();
-    expect(await screen.findByRole('alert')).toHaveTextContent('ANTHROPIC_API_KEY');
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'ANTHROPIC_API_KEY',
+    );
   });
 
   it('shows an unreachable-backend banner', async () => {
     server.use(http.get('/api/health', () => HttpResponse.error()));
     renderApp();
-    expect(await screen.findByRole('alert', {}, { timeout: 4000 })).toHaveTextContent('Cannot reach the backend');
+    expect(
+      await screen.findByRole('alert', {}, { timeout: 4000 }),
+    ).toHaveTextContent('Cannot reach the backend');
   });
 });

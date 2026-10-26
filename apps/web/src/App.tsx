@@ -10,7 +10,8 @@ export function makeQueryClient() {
       queries: {
         staleTime: 10_000,
         // Don't retry errors the server answered deliberately.
-        retry: (count, error) => !(error instanceof ApiError && error.status > 0) && count < 2,
+        retry: (count, error) =>
+          !(error instanceof ApiError && error.status > 0) && count < 2,
       },
     },
   });
