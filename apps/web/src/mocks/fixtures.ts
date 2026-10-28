@@ -94,7 +94,7 @@ export const comments: ReviewComment[] = [
   {
     id: 'c2',
     path: 'src/routes/refunds.ts',
-    line: 20,
+    line: 12,
     side: 'RIGHT',
     severity: 'minor',
     body: 'Amount should be integer minor units.',
@@ -104,8 +104,8 @@ export const comments: ReviewComment[] = [
   },
   {
     id: 'c3',
-    path: 'src/services/refunds.ts',
-    line: 8,
+    path: 'src/routes/refunds.ts',
+    line: 10,
     side: 'LEFT',
     severity: 'nit',
     body: 'Consider keeping the old name for grep-ability.',

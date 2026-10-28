@@ -1,7 +1,9 @@
 import { createBrowserRouter, type RouteObject } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
+import { Inbox } from '@/pages/Inbox';
 import { Placeholder } from '@/pages/Placeholder';
 import { ProjectEditor } from '@/pages/ProjectEditor';
+import { ReviewDetail } from '@/pages/ReviewDetail';
 import { Projects } from '@/pages/Projects';
 import { Settings } from '@/pages/Settings';
 
@@ -9,10 +11,10 @@ export const routes: RouteObject[] = [
   {
     element: <AppShell />,
     children: [
-      { path: '/', element: <Placeholder title="Inbox" phase={3} /> },
+      { path: '/', element: <Inbox /> },
       {
         path: '/reviews/:id',
-        element: <Placeholder title="Review" phase={2} />,
+        element: <ReviewDetail />,
       },
       { path: '/projects', element: <Projects /> },
       { path: '/projects/:owner/:repo', element: <ProjectEditor /> },

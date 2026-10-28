@@ -4,7 +4,9 @@ The shared API contract was established for Phase 0. Claude Code should add prop
 
 ## Requests
 
-_None pending._
+### Mark ignored files in `GET /reviews/:id/diff` (requested by web, Phase 2)
+
+Add `ignored: z.boolean().optional()` to `DiffFileSchema`, true when the path matches the repo's `ignore_paths`. The web UI must collapse such files and tag them "ignored by rules" (PLAN 9.3), but the contract carries no such flag. Until it exists, the UI treats any non-binary file with no hunks as ignored.
 
 ## Applied changes
 
