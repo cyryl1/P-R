@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -23,6 +23,16 @@ describe('application configuration', () => {
     expect((await stat(paths.rules)).isDirectory()).toBe(true);
     expect((await stat(paths.logs)).isDirectory()).toBe(true);
     expect(resolveDataPaths({ PR_REVIEWER_HOME: home }).home).toBe(home);
+  });
+
+  it('loads the API key from the selected environment directory', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'pr-reviewer-env-'));
+    const env: NodeJS.ProcessEnv = { PR_REVIEWER_HOME: home };
+    await writeFile(join(home, '.env'), 'OPENROUTER_API_KEY=test-key\n');
+
+    await initializeConfig({ env, cwd: home });
+
+    expect(env.OPENROUTER_API_KEY).toBe('test-key');
   });
 
   it('validates settings and determines API key presence without returning the key', () => {

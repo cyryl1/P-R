@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { config as loadDotEnv } from 'dotenv';
 import { parse, stringify } from 'yaml';
 import { AppConfigSchema, type AppConfig } from '@pr-reviewer/shared';
@@ -29,13 +30,19 @@ export function resolveDataPaths(
 
 export const DEFAULT_CONFIG: AppConfig = AppConfigSchema.parse({});
 
+const repositoryRoot = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../../..',
+);
+
 export async function initializeConfig(
   options: { env?: NodeJS.ProcessEnv; cwd?: string } = {},
 ) {
   const env = options.env ?? process.env;
   const paths = resolveDataPaths(env);
   loadDotEnv({
-    path: resolve(options.cwd ?? process.cwd(), '.env'),
+    path: resolve(options.cwd ?? repositoryRoot, '.env'),
+    processEnv: env as Record<string, string>,
     quiet: true,
   });
   await Promise.all([
