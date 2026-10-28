@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './client';
 import type {
+  AddCommentBody,
   EditCommentBody,
   EditReviewBody,
   PublishBody,
@@ -39,8 +40,16 @@ export const useReviews = (query: ReviewListQuery = {}) =>
     queryKey: keys.reviews(query),
     queryFn: () => api.reviews(query),
   });
+const IN_PROGRESS = ['queued', 'gathering', 'reviewing', 'publishing'];
+
+/** Polls while a review is being generated; SSE replaces this in Phase 4. */
 export const useReview = (id: string) =>
-  useQuery({ queryKey: keys.review(id), queryFn: () => api.review(id) });
+  useQuery({
+    queryKey: keys.review(id),
+    queryFn: () => api.review(id),
+    refetchInterval: (query) =>
+      IN_PROGRESS.includes(query.state.data?.status ?? '') ? 2_000 : false,
+  });
 export const useReviewDiff = (id: string) =>
   useQuery({
     queryKey: keys.reviewDiff(id),
@@ -81,6 +90,38 @@ export function useCreateReview() {
   return useMutation({
     mutationFn: (prUrl: string) => api.createReview(prUrl),
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.inbox }),
+  });
+}
+
+export function useAddComment(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: AddCommentBody) => api.addComment(id, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.review(id) }),
+  });
+}
+
+export function useDeleteComment(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (cid: string) => api.deleteComment(id, cid),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.review(id) }),
+  });
+}
+
+export function useRerunReview(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.rerunReview(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['review'] }),
+  });
+}
+
+export function useDismissReview(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.dismissReview(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.review(id) }),
   });
 }
 
