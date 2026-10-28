@@ -7,8 +7,12 @@ import { initializeConfig, isLlmConfigured, resolveDataPaths } from './config/in
 import type { DataPaths } from './config/index.js';
 import { createGhClient, type GhClient } from './gh/client.js';
 import { registerProjectRoutes } from './api/projects.js';
+import { registerReviewRoutes } from './api/reviews.js';
+import { ReviewDatabase } from './db/index.js';
+import { createReviewProvider } from './llm/index.js';
+import { ReviewService } from './review/index.js';
 
-export type ServerOptions = { config?: AppConfig; paths?: DataPaths; gh?: GhClient; env?: NodeJS.ProcessEnv; version?: string };
+export type ServerOptions = { config?: AppConfig; paths?: DataPaths; gh?: GhClient; env?: NodeJS.ProcessEnv; version?: string; reviews?: ReviewService };
 
 export function createServer(options: ServerOptions = {}) {
   const app = Fastify({ logger: true });
@@ -38,13 +42,29 @@ export function createServer(options: ServerOptions = {}) {
     }));
   });
   registerProjectRoutes(app, paths);
+  if (options.reviews) registerReviewRoutes(app, options.reviews);
   return app;
 }
 
 const isDirectRun = process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
 if (isDirectRun) {
-  initializeConfig().then(({ paths, config }) => createServer({ paths, config }).listen({ port: config.server.port, host: '127.0.0.1' })).catch((error: unknown) => {
-    console.error(error);
-    process.exitCode = 1;
-  });
+  initializeConfig()
+    .then(async ({ paths, config }) => {
+      const gh = createGhClient();
+      const database = await ReviewDatabase.open(paths.database);
+      const reviews = new ReviewService(
+        database,
+        gh,
+        createReviewProvider(config),
+        paths,
+        config,
+      );
+      const app = createServer({ paths, config, gh, reviews });
+      app.addHook('onClose', () => database.close());
+      return app.listen({ port: config.server.port, host: '127.0.0.1' });
+    })
+    .catch((error: unknown) => {
+      console.error(error);
+      process.exitCode = 1;
+    });
 }

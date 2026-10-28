@@ -14,9 +14,20 @@ export class MockProvider implements ReviewProvider {
     },
   ) {}
 
-  async review(): Promise<ProviderReviewResult> {
+  async review(input: Parameters<ReviewProvider['review']>[0]): Promise<ProviderReviewResult> {
+    const output =
+      this.output.comments.length > 0 || !input.mockAnchors?.length
+        ? this.output
+        : {
+            ...this.output,
+            comments: input.mockAnchors.slice(0, 3).map((anchor) => ({
+              ...anchor,
+              severity: 'minor' as const,
+              body: `Mock review comment for ${anchor.path}:${anchor.line}.`,
+            })),
+          };
     return {
-      output: this.output,
+      output,
       meta: {
         provider: this.name,
         model: this.model,

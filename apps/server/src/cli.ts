@@ -6,7 +6,10 @@ import type { DataPaths } from './config/index.js';
 import { createGhClient, type GhClient } from './gh/client.js';
 import { getRules } from './rules/index.js';
 import { parseDiff } from './diff/index.js';
-import type { RulesFile } from '@pr-reviewer/shared';
+import { AppConfigSchema, type RulesFile } from '@pr-reviewer/shared';
+import { ReviewDatabase } from './db/index.js';
+import { createReviewProvider } from './llm/index.js';
+import { ReviewService } from './review/index.js';
 
 export type ParsedPrUrl = { repo: string; number: number };
 export type DryRunResult = {
@@ -92,13 +95,44 @@ async function main(args: string[]) {
   const url = args.find((argument) => !argument.startsWith('--'));
   const json = args.includes('--json');
   if (args.includes('--help') || args.includes('-h')) {
-    process.stdout.write('Usage: pnpm review <pr-url> --dry-run [--json]\n');
+    process.stdout.write('Usage: pnpm review <pr-url> [--dry-run] [--provider mock|openrouter] [--json]\n');
     return;
   }
-  if (!url || !args.includes('--dry-run')) throw new Error('Usage: pnpm review <pr-url> --dry-run [--json]');
-  const { paths } = await initializeConfig();
-  const result = await runDryRun(url, createGhClient(), paths);
-  printResult(result, json);
+  if (!url) throw new Error('Usage: pnpm review <pr-url> [--dry-run] [--provider mock|openrouter] [--json]');
+  const { paths, config } = await initializeConfig();
+  const gh = createGhClient();
+  if (args.includes('--dry-run')) {
+    const result = await runDryRun(url, gh, paths);
+    printResult(result, json);
+    return;
+  }
+  const providerIndex = args.indexOf('--provider');
+  const requestedProvider = providerIndex >= 0 ? args[providerIndex + 1] : undefined;
+  if (requestedProvider && !['mock', 'openrouter'].includes(requestedProvider)) throw new Error('--provider must be mock or openrouter');
+  const runtimeConfig = AppConfigSchema.parse({
+    ...config,
+    llm: {
+      ...config.llm,
+      ...(requestedProvider ? { provider: requestedProvider } : {}),
+      ...(requestedProvider === 'mock' ? { model: 'mock' } : {}),
+    },
+  });
+  const database = await ReviewDatabase.open(paths.database);
+  try {
+    const service = new ReviewService(
+      database,
+      gh,
+      createReviewProvider(runtimeConfig),
+      paths,
+      runtimeConfig,
+    );
+    const summary = await service.create(url);
+    const detail = service.get(summary.id);
+    if (json) process.stdout.write(`${JSON.stringify(detail, null, 2)}\n`);
+    else process.stdout.write(`Review ${summary.id}: ${summary.status} · ${summary.commentCount} comments\n`);
+  } finally {
+    database.close();
+  }
 }
 
 const isDirectRun = process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
