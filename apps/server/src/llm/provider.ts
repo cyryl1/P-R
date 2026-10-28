@@ -4,6 +4,7 @@ export type ReviewInput = {
   system: string;
   prompt: string;
   maxOutputTokens?: number;
+  mockAnchors?: Array<{ path: string; line: number; side: 'RIGHT' | 'LEFT' }>;
 };
 
 export type ProviderMeta = {

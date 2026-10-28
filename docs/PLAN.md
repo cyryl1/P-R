@@ -121,7 +121,7 @@ One pnpm workspace, Node 20+, TypeScript strict mode in every package. `pnpm dev
 | Runtime               | Node 20+, pnpm 9 workspaces                                                      | Codex (scaffold) |
 | Server framework      | Fastify                                                                          | Codex            |
 | Validation / contract | Zod (schemas exported from `packages/shared`)                                    | Codex            |
-| Database              | SQLite via `better-sqlite3` + Drizzle ORM                                        | Codex            |
+| Database              | SQLite via portable `sql.js` with versioned SQL migrations                       | Codex            |
 | YAML                  | `yaml` package (keeps comments when re-saving)                                   | Codex            |
 | LLM                   | OpenRouter chat completions API, model set in config (default `openrouter/free`) | Codex            |
 | Process exec          | `execa` wrapper around `gh`                                                      | Codex            |
