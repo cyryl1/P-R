@@ -24,15 +24,15 @@ v1 is a local web app that watches GitHub for PRs where you are requested as a r
 
 **Key decisions (change them here before kickoff if you disagree)**
 
-| Decision | Choice | Why |
-| --- | --- | --- |
-| Language | TypeScript everywhere | One language lets both agents share types for the API contract. |
-| Repo shape | pnpm monorepo: `apps/server`, `apps/web`, `packages/shared` | Clear ownership lines between the two agents. |
-| GitHub access | `gh` CLI via child process | Your existing login and permissions, no tokens to manage. |
-| Detection | Polling `gh search prs` every 5 minutes | No public server or webhooks needed. |
-| LLM | Claude API behind a provider interface, plus a mock provider | Mock lets the frontend and tests run without API calls; `claude -p` can be added later as a second provider. |
-| Storage | SQLite for state, YAML files on disk for rules | Rules stay human-editable and live inside the tool's data folder, never in a project repo. |
-| Ownership | Codex: backend + shared contract. Claude Code: frontend. | Requested split. |
+| Decision      | Choice                                                       | Why                                                                                         |
+| ------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| Language      | TypeScript everywhere                                        | One language lets both agents share types for the API contract.                             |
+| Repo shape    | pnpm monorepo: `apps/server`, `apps/web`, `packages/shared`  | Clear ownership lines between the two agents.                                               |
+| GitHub access | `gh` CLI via child process                                   | Your existing login and permissions, no tokens to manage.                                   |
+| Detection     | Polling `gh search prs` every 5 minutes                      | No public server or webhooks needed.                                                        |
+| LLM           | OpenRouter behind a provider interface, plus a mock provider | `openrouter/free` provides zero-cost inference; mock keeps tests deterministic and offline. |
+| Storage       | SQLite for state, YAML files on disk for rules               | Rules stay human-editable and live inside the tool's data folder, never in a project repo.  |
+| Ownership     | Codex: backend + shared contract. Claude Code: frontend.     | Requested split.                                                                            |
 
 ## 2. How it works end to end
 
@@ -45,7 +45,7 @@ Every review follows the same seven steps, whether it was triggered by the polle
 │                       │  /api  │                                  │        │ diffs and reviews   │
 │  Inbox                │◄──────►│  API          REST + SSE, Zod    │        └─────────────────────┘
 │  Review editor        │        │  Poller + job queue              │        ┌─────────────────────┐
-│  Rules editor         │        │  Review engine  checks, prompt,  │◄──────►│ Claude API          │
+│  Rules editor         │        │  Review engine  checks, prompt,  │◄──────►│ OpenRouter          │
 │  History              │        │                 LLM, anchors     │        │ review model        │
 │  Settings             │        │  Publisher    pending via gh api │        └─────────────────────┘
 │                       │        │                                  │        ┌─────────────────────┐
@@ -75,7 +75,7 @@ The frontend only ever talks to the backend's `/api`; everything external goes t
   rules/owner__repo.yml    one rules file per repo
   data.db                  SQLite: PRs, reviews, comments, activity
   logs/                    server logs
-.env (in the repo root)    ANTHROPIC_API_KEY, never sent to the browser
+.env (in the repo root)    OPENROUTER_API_KEY, never sent to the browser
 ```
 
 ## 3. Roles: who owns what
@@ -108,7 +108,7 @@ The backend is the brain and the only thing that touches GitHub, the LLM or the 
 1. `packages/shared` is the contract. Codex writes it in Phase 0 and it is frozen after that.
 2. If Claude Code needs a contract change, it adds an entry to `docs/CONTRACT_CHANGES.md` (what, why, proposed shape) and does not edit `packages/shared` itself. Codex applies it and bumps the change log.
 3. Neither agent edits the other's app folder. Root config changes (`package.json`, `tsconfig.base.json`, lint) go through you.
-4. Each agent works on its own branch prefix (`codex/…`, `claude/…`) and opens PRs into `main`. You merge. Bonus: once v1 works, the tool reviews these PRs.
+4. Each agent works on its own branch prefix (`wiseman/…` for Codex, `claude/…` for Claude Code) and opens PRs into `main`. You merge. Bonus: once v1 works, the tool reviews these PRs.
 5. Every PR states which phase task it completes and how it was tested.
 6. When you hand an agent a phase, paste that phase's section from this doc plus the sections it references.
 
@@ -116,22 +116,22 @@ The backend is the brain and the only thing that touches GitHub, the LLM or the 
 
 One pnpm workspace, Node 20+, TypeScript strict mode in every package. `pnpm dev` runs server and web together; `pnpm start` serves the built web app from the server on one port.
 
-| Area | Choice | Owner |
-| --- | --- | --- |
-| Runtime | Node 20+, pnpm 9 workspaces | Codex (scaffold) |
-| Server framework | Fastify | Codex |
-| Validation / contract | Zod (schemas exported from `packages/shared`) | Codex |
-| Database | SQLite via `better-sqlite3` + Drizzle ORM | Codex |
-| YAML | `yaml` package (keeps comments when re-saving) | Codex |
-| LLM | `@anthropic-ai/sdk`, model set in config (default `claude-sonnet-5-5`) | Codex |
-| Process exec | `execa` wrapper around `gh` | Codex |
-| Frontend build | Vite + React 18 + TypeScript | Claude Code |
-| Routing / data | React Router, TanStack Query | Claude Code |
-| Styling | Tailwind CSS (+ shadcn/ui primitives) | Claude Code |
-| YAML editor | CodeMirror 6 with YAML mode | Claude Code |
-| API mocking | MSW (Mock Service Worker) | Claude Code |
-| Tests | Vitest everywhere; Testing Library on web | Both |
-| Lint / format | ESLint + Prettier, shared root config | Codex (scaffold) |
+| Area                  | Choice                                                                           | Owner            |
+| --------------------- | -------------------------------------------------------------------------------- | ---------------- |
+| Runtime               | Node 20+, pnpm 9 workspaces                                                      | Codex (scaffold) |
+| Server framework      | Fastify                                                                          | Codex            |
+| Validation / contract | Zod (schemas exported from `packages/shared`)                                    | Codex            |
+| Database              | SQLite via `better-sqlite3` + Drizzle ORM                                        | Codex            |
+| YAML                  | `yaml` package (keeps comments when re-saving)                                   | Codex            |
+| LLM                   | OpenRouter chat completions API, model set in config (default `openrouter/free`) | Codex            |
+| Process exec          | `execa` wrapper around `gh`                                                      | Codex            |
+| Frontend build        | Vite + React 18 + TypeScript                                                     | Claude Code      |
+| Routing / data        | React Router, TanStack Query                                                     | Claude Code      |
+| Styling               | Tailwind CSS (+ shadcn/ui primitives)                                            | Claude Code      |
+| YAML editor           | CodeMirror 6 with YAML mode                                                      | Claude Code      |
+| API mocking           | MSW (Mock Service Worker)                                                        | Claude Code      |
+| Tests                 | Vitest everywhere; Testing Library on web                                        | Both             |
+| Lint / format         | ESLint + Prettier, shared root config                                            | Codex (scaffold) |
 
 **Repo layout**
 
@@ -140,7 +140,7 @@ pr-reviewer/
   package.json              workspace scripts: dev, build, start, test, lint, review
   pnpm-workspace.yaml
   tsconfig.base.json
-  .env.example              ANTHROPIC_API_KEY=
+  .env.example              OPENROUTER_API_KEY=
   AGENTS.md                 rules for Codex
   CLAUDE.md                 rules for Claude Code
   docs/
@@ -163,7 +163,7 @@ pr-reviewer/
     diff/                   unified diff parser, anchor validation
     context/                gather PR data, diff, context files
     checks/                 deterministic check implementations
-    llm/                    provider interface, anthropic, mock, prompt
+    llm/                    provider interface, openrouter, mock, prompt
     review/                 orchestrates gather -> checks -> llm -> save
     publish/                build + post GitHub review payload
     poller/                 search loop, SHA tracking, triggers
@@ -194,22 +194,22 @@ repo: acme/payments-api
 enabled: true
 
 triggers:
-  on_review_request: auto     # auto | manual  (manual = show in inbox, wait for a click)
-  on_new_commits: notify      # auto | notify | ignore
+  on_review_request: auto # auto | manual  (manual = show in inbox, wait for a click)
+  on_new_commits: notify # auto | notify | ignore
   skip_drafts: true
 
 review:
-  focus:                      # strict | normal | light | off
+  focus: # strict | normal | light | off
     security: strict
     correctness: strict
     performance: normal
     readability: light
     style: off
-  tone: "Concise. Suggest a fix, not just the problem."
+  tone: 'Concise. Suggest a fix, not just the problem.'
   max_comments: 10
-  min_severity: minor         # blocker | major | minor | nit  (drop anything below)
-  ignore_paths: ["**/*.lock", "docs/**", "generated/**"]
-  context_files: ["CONTRIBUTING.md", "src/middleware/auth.ts"]
+  min_severity: minor # blocker | major | minor | nit  (drop anything below)
+  ignore_paths: ['**/*.lock', 'docs/**', 'generated/**']
+  context_files: ['CONTRIBUTING.md', 'src/middleware/auth.ts']
   instructions: |
     We use Result types, never throw in services.
     Money is always integer minor units.
@@ -219,12 +219,12 @@ rules:
     type: llm
     description: Every new HTTP endpoint uses the requireAuth middleware.
     severity: blocker
-    paths: ["src/routes/**"]
+    paths: ['src/routes/**']
 
   - id: tests-for-logic
     type: require_tests
-    when_paths: ["src/**/*.ts"]
-    test_paths: ["**/*.test.ts", "tests/**"]
+    when_paths: ['src/**/*.ts']
+    test_paths: ['**/*.test.ts', 'tests/**']
     severity: major
 
   - id: pr-size
@@ -234,7 +234,7 @@ rules:
 
   - id: no-env-files
     type: forbid_paths
-    paths: [".env*", "**/*.pem"]
+    paths: ['.env*', '**/*.pem']
     severity: blocker
 
   - id: has-description
@@ -249,14 +249,14 @@ rules:
 
 **Rule types in v1**
 
-| type | Fields | Deterministic? | Passes when |
-| --- | --- | --- | --- |
-| `llm` | `description`, optional `paths` | No (LLM judges) | The model reports it satisfied, or it does not apply to the changed files |
-| `require_tests` | `when_paths`, `test_paths` | Yes | No file matches `when_paths`, or at least one changed file matches `test_paths` |
-| `max_changed_lines` | `limit` | Yes | additions + deletions (excluding `ignore_paths`) ≤ `limit` |
-| `forbid_paths` | `paths` | Yes | No changed file matches `paths` |
-| `require_description` | `min_length` | Yes | PR body, trimmed, has at least `min_length` characters |
-| `require_linked_issue` | none | Yes | PR has a closing issue reference, or the body contains `#<number>` |
+| type                   | Fields                          | Deterministic?  | Passes when                                                                     |
+| ---------------------- | ------------------------------- | --------------- | ------------------------------------------------------------------------------- |
+| `llm`                  | `description`, optional `paths` | No (LLM judges) | The model reports it satisfied, or it does not apply to the changed files       |
+| `require_tests`        | `when_paths`, `test_paths`      | Yes             | No file matches `when_paths`, or at least one changed file matches `test_paths` |
+| `max_changed_lines`    | `limit`                         | Yes             | additions + deletions (excluding `ignore_paths`) ≤ `limit`                      |
+| `forbid_paths`         | `paths`                         | Yes             | No changed file matches `paths`                                                 |
+| `require_description`  | `min_length`                    | Yes             | PR body, trimmed, has at least `min_length` characters                          |
+| `require_linked_issue` | none                            | Yes             | PR has a closing issue reference, or the body contains `#<number>`              |
 
 Common to every rule: `id` (unique slug, required), `severity` (required), `enabled` (default true). Glob matching uses `picomatch`. Unknown rule types fail validation with a clear message naming the rule id.
 
@@ -275,18 +275,18 @@ server:
 poller:
   enabled: true
   interval_minutes: 5
-  include_team_requests: false   # false = direct requests only
+  include_team_requests: false # false = direct requests only
 llm:
-  provider: anthropic             # anthropic | mock
-  model: claude-sonnet-5-5
-  max_input_tokens: 120000
+  provider: openrouter # openrouter | mock
+  model: openrouter/free
+  max_input_tokens: 100000
   max_output_tokens: 8000
 jobs:
   concurrency: 1
   max_retries: 2
 ```
 
-The API key is read only from the environment (`ANTHROPIC_API_KEY`, loaded from `.env`). The UI shows whether it is set, never the value.
+The API key is read only from the environment (`OPENROUTER_API_KEY`, loaded from `.env`). The UI shows whether it is set, never the value.
 
 ## 6. Data model and review statuses
 
@@ -294,69 +294,69 @@ Four SQLite tables hold everything; a review is always tied to one PR at one hea
 
 **`prs`** — one row per PR the tool has seen
 
-| Column | Type | Notes |
-| --- | --- | --- |
-| id | integer pk | |
-| repo | text | `owner/repo` |
-| number | integer | unique with `repo` |
-| title, author, url | text | |
-| head_sha | text | latest seen |
-| base_ref | text | |
-| is_draft | boolean | |
-| review_requested | boolean | true while it appears in the search results |
-| first_seen_at, last_seen_at | text (ISO) | |
+| Column                      | Type       | Notes                                       |
+| --------------------------- | ---------- | ------------------------------------------- |
+| id                          | integer pk |                                             |
+| repo                        | text       | `owner/repo`                                |
+| number                      | integer    | unique with `repo`                          |
+| title, author, url          | text       |                                             |
+| head_sha                    | text       | latest seen                                 |
+| base_ref                    | text       |                                             |
+| is_draft                    | boolean    |                                             |
+| review_requested            | boolean    | true while it appears in the search results |
+| first_seen_at, last_seen_at | text (ISO) |                                             |
 
 **`reviews`** — one row per review attempt
 
-| Column | Type | Notes |
-| --- | --- | --- |
-| id | text pk | ULID, used in URLs |
-| pr_id | integer fk | |
-| head_sha | text | SHA this review covers |
-| trigger | text | `auto` \| `manual` \| `rerun` |
-| status | text | see statuses below |
-| summary | text | editable |
-| verdict | text | `COMMENT` \| `APPROVE` \| `REQUEST_CHANGES` (suggested by LLM, editable) |
-| rule_results | json | `[{ruleId, kind, status, note}]` |
-| rules_snapshot | json | the parsed rules used, for reproducibility |
-| llm_meta | json | model, input/output tokens, duration, truncation notes |
-| error | text | set when `failed` |
-| github_review_id, github_review_url | text | set after publish |
-| created_at, updated_at, published_at | text (ISO) | |
+| Column                               | Type       | Notes                                                                    |
+| ------------------------------------ | ---------- | ------------------------------------------------------------------------ |
+| id                                   | text pk    | ULID, used in URLs                                                       |
+| pr_id                                | integer fk |                                                                          |
+| head_sha                             | text       | SHA this review covers                                                   |
+| trigger                              | text       | `auto` \| `manual` \| `rerun`                                            |
+| status                               | text       | see statuses below                                                       |
+| summary                              | text       | editable                                                                 |
+| verdict                              | text       | `COMMENT` \| `APPROVE` \| `REQUEST_CHANGES` (suggested by LLM, editable) |
+| rule_results                         | json       | `[{ruleId, kind, status, note}]`                                         |
+| rules_snapshot                       | json       | the parsed rules used, for reproducibility                               |
+| llm_meta                             | json       | model, input/output tokens, duration, truncation notes                   |
+| error                                | text       | set when `failed`                                                        |
+| github_review_id, github_review_url  | text       | set after publish                                                        |
+| created_at, updated_at, published_at | text (ISO) |                                                                          |
 
 **`review_comments`**
 
-| Column | Type | Notes |
-| --- | --- | --- |
-| id | text pk | ULID |
-| review_id | text fk | |
-| path | text | file path |
-| line | integer | line number in the file |
-| side | text | `RIGHT` (new code) \| `LEFT` (deleted code) |
-| severity | text | `blocker` \| `major` \| `minor` \| `nit` |
-| rule_id | text, nullable | which rule produced it |
-| body | text | markdown, editable |
-| suggestion | text, nullable | replacement code, rendered as a GitHub suggestion block |
-| source | text | `ai` \| `user` |
-| included | boolean | unticked comments are kept but not published |
-| anchor_status | text | `valid` \| `invalid` (not on a diff line; goes into the summary instead) |
+| Column        | Type           | Notes                                                                    |
+| ------------- | -------------- | ------------------------------------------------------------------------ |
+| id            | text pk        | ULID                                                                     |
+| review_id     | text fk        |                                                                          |
+| path          | text           | file path                                                                |
+| line          | integer        | line number in the file                                                  |
+| side          | text           | `RIGHT` (new code) \| `LEFT` (deleted code)                              |
+| severity      | text           | `blocker` \| `major` \| `minor` \| `nit`                                 |
+| rule_id       | text, nullable | which rule produced it                                                   |
+| body          | text           | markdown, editable                                                       |
+| suggestion    | text, nullable | replacement code, rendered as a GitHub suggestion block                  |
+| source        | text           | `ai` \| `user`                                                           |
+| included      | boolean        | unticked comments are kept but not published                             |
+| anchor_status | text           | `valid` \| `invalid` (not on a diff line; goes into the summary instead) |
 
 **`activity`** — append-only log shown on the History page: id, ts, level (`info` | `warn` | `error`), type (e.g. `poll.completed`, `review.failed`, `review.published`), message, review_id?, pr_id?.
 
 **Review statuses**
 
-| Status | Meaning | Set by |
-| --- | --- | --- |
-| `queued` | Waiting for a job slot | poller, manual trigger, rerun |
-| `gathering` | Fetching PR data and diff via `gh` | job |
-| `reviewing` | Running checks and the LLM | job |
-| `draft_ready` | Ready to edit in the UI | job |
-| `stale` | New commits arrived before publishing | poller |
-| `publishing` | Posting to GitHub | publish endpoint |
-| `published_pending` | Pending review exists on GitHub, not yet submitted | publish endpoint |
-| `submitted` | Review is public on GitHub | publish endpoint (submit), or poller detecting you submitted it on GitHub |
-| `dismissed` | You chose not to publish | dismiss endpoint |
-| `failed` | Something broke; `error` says what | job / publish |
+| Status              | Meaning                                            | Set by                                                                    |
+| ------------------- | -------------------------------------------------- | ------------------------------------------------------------------------- |
+| `queued`            | Waiting for a job slot                             | poller, manual trigger, rerun                                             |
+| `gathering`         | Fetching PR data and diff via `gh`                 | job                                                                       |
+| `reviewing`         | Running checks and the LLM                         | job                                                                       |
+| `draft_ready`       | Ready to edit in the UI                            | job                                                                       |
+| `stale`             | New commits arrived before publishing              | poller                                                                    |
+| `publishing`        | Posting to GitHub                                  | publish endpoint                                                          |
+| `published_pending` | Pending review exists on GitHub, not yet submitted | publish endpoint                                                          |
+| `submitted`         | Review is public on GitHub                         | publish endpoint (submit), or poller detecting you submitted it on GitHub |
+| `dismissed`         | You chose not to publish                           | dismiss endpoint                                                          |
+| `failed`            | Something broke; `error` says what                 | job / publish                                                             |
 
 Allowed edits: comments, summary and verdict are editable only in `draft_ready` and `stale`. Rerun is allowed from `draft_ready`, `stale`, `failed` and `dismissed`, and creates a new review row. On server start, any review stuck in `gathering`, `reviewing` or `publishing` is reset to `queued` (or `failed` for publishing, after checking GitHub for an existing pending review).
 
@@ -371,17 +371,17 @@ The backend is eleven small modules wired together by the review orchestrator; e
 - Error mapping: "not logged in" → `GhAuthError`; HTTP 404 → `GhNotFoundError`; 403 with rate-limit text → `GhRateLimitError`; anything else → `GhError` with stderr attached.
 - Typed commands it must expose:
 
-| Function | Command |
-| --- | --- |
-| `authStatus()` | `gh auth status` + `gh api user --jq .login` |
-| `searchReviewRequests({teams})` | `gh search prs --review-requested=@me --state=open --json number,title,repository,url,author,isDraft,updatedAt --limit 100` (direct-only: query `user-review-requested:@me` instead) |
-| `getPr(repo, n)` | `gh pr view n -R repo --json number,title,body,author,url,baseRefName,headRefName,headRefOid,isDraft,additions,deletions,files,closingIssuesReferences,state` |
-| `getDiff(repo, n)` | `gh pr diff n -R repo` (raw unified diff) |
-| `getFile(repo, path, ref)` | `gh api repos/{repo}/contents/{path}?ref={ref} -H "Accept: application/vnd.github.raw"` |
-| `listReviews(repo, n)` | `gh api repos/{repo}/pulls/{n}/reviews --paginate` |
-| `createReview(repo, n, payload)` | `gh api repos/{repo}/pulls/{n}/reviews -X POST --input -` (JSON on stdin) |
-| `submitReview(repo, n, id, event, body)` | `gh api repos/{repo}/pulls/{n}/reviews/{id}/events -X POST --input -` |
-| `deletePendingReview(repo, n, id)` | `gh api repos/{repo}/pulls/{n}/reviews/{id} -X DELETE` |
+| Function                                 | Command                                                                                                                                                                              |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `authStatus()`                           | `gh auth status` + `gh api user --jq .login`                                                                                                                                         |
+| `searchReviewRequests({teams})`          | `gh search prs --review-requested=@me --state=open --json number,title,repository,url,author,isDraft,updatedAt --limit 100` (direct-only: query `user-review-requested:@me` instead) |
+| `getPr(repo, n)`                         | `gh pr view n -R repo --json number,title,body,author,url,baseRefName,headRefName,headRefOid,isDraft,additions,deletions,files,closingIssuesReferences,state`                        |
+| `getDiff(repo, n)`                       | `gh pr diff n -R repo` (raw unified diff)                                                                                                                                            |
+| `getFile(repo, path, ref)`               | `gh api repos/{repo}/contents/{path}?ref={ref} -H "Accept: application/vnd.github.raw"`                                                                                              |
+| `listReviews(repo, n)`                   | `gh api repos/{repo}/pulls/{n}/reviews --paginate`                                                                                                                                   |
+| `createReview(repo, n, payload)`         | `gh api repos/{repo}/pulls/{n}/reviews -X POST --input -` (JSON on stdin)                                                                                                            |
+| `submitReview(repo, n, id, event, body)` | `gh api repos/{repo}/pulls/{n}/reviews/{id}/events -X POST --input -`                                                                                                                |
+| `deletePendingReview(repo, n, id)`       | `gh api repos/{repo}/pulls/{n}/reviews/{id} -X DELETE`                                                                                                                               |
 
 Never build shell strings; always pass an args array. Payloads go through stdin, never through command-line arguments.
 
@@ -421,12 +421,21 @@ Never build shell strings; always pass an args array. Payloads go through stdin,
 
 ```ts
 interface ReviewProvider {
-  name: string
-  review(input: ReviewInput): Promise<ReviewOutput>
+  name: string;
+  review(input: ReviewInput): Promise<{
+    output: ReviewOutput;
+    meta: {
+      provider: string;
+      model: string;
+      inputTokens: number;
+      outputTokens: number;
+      durationMs: number;
+    };
+  }>;
 }
 ```
 
-- `AnthropicProvider`: uses the Messages API with a single tool `submit_review` whose `input_schema` is the JSON Schema of `ReviewOutput`, and `tool_choice` forcing that tool. Parse the tool input, validate with Zod; on failure retry once with the validation errors appended; then fail the review.
+- `OpenRouterProvider`: uses chat completions with strict JSON Schema output and `provider.require_parameters = true`. Parse the response and validate it with Zod; on schema failure retry once with validation feedback. Do not retry HTTP or quota errors. Record the actual model selected by `openrouter/free` in `llm_meta`.
 - `MockProvider`: returns a deterministic `ReviewOutput` built from the diff (e.g. one comment on the first added line of each file). Used by tests, by `--provider mock`, and when no API key is set and the user opts in.
 - `ReviewOutput` shape:
 
@@ -444,12 +453,12 @@ interface ReviewProvider {
 ```
 
 - **Prompt structure** (keep in `llm/prompt.ts`, snapshot-tested):
-    1. System: role ("a senior reviewer applying this reviewer's rules, not generic advice"), output contract, hard rules: only comment on lines shown with an `R`/`L` anchor; one issue per comment; no praise-only comments; respect `max_comments` and `min_severity`; follow `tone`.
-    2. User block A: PR title, author, description, base branch, size.
-    3. User block B: the focus levels, `instructions`, and every enabled `llm` rule with its id, description, severity and paths.
-    4. User block C: deterministic results ("already reported, don't repeat").
-    5. User block D: context files, each fenced with its path.
-    6. User block E: the anchored diff from `renderForPrompt`.
+  1. System: role ("a senior reviewer applying this reviewer's rules, not generic advice"), output contract, hard rules: only comment on lines shown with an `R`/`L` anchor; one issue per comment; no praise-only comments; respect `max_comments` and `min_severity`; follow `tone`.
+  2. User block A: PR title, author, description, base branch, size.
+  3. User block B: the focus levels, `instructions`, and every enabled `llm` rule with its id, description, severity and paths.
+  4. User block C: deterministic results ("already reported, don't repeat").
+  5. User block D: context files, each fenced with its path.
+  6. User block E: the anchored diff from `renderForPrompt`.
 - **Token budget**: estimate tokens as characters / 4. If over `max_input_tokens`: drop ignored files, then lockfiles/generated/minified files, then truncate the largest files' hunks with a `[truncated N lines]` marker. Record what was cut in `llm_meta.truncation` and mention it in the summary. Chunked multi-call review is a v2 item.
 
 ### 7.8 `review/` — the orchestrator
@@ -485,7 +494,7 @@ interface ReviewProvider {
 - SSE hub at `/api/events` with a 25 s heartbeat comment.
 - Error responses always look like `{error: {code, message, details?}}`.
 - In production mode, serve `apps/web/dist` and fall back to `index.html` for client routes.
-- CLI `pnpm review <pr-url> [--dry-run] [--provider mock|anthropic] [--json]`: runs the same orchestrator; `--dry-run` prints the result and does not save or publish. This is the Phase 1–2 acceptance tool.
+- CLI `pnpm review <pr-url> [--dry-run] [--provider mock|openrouter] [--json]`: runs the same orchestrator; `--dry-run` prints the result and does not save or publish. This is the Phase 1–2 acceptance tool.
 
 ## 8. API contract
 
@@ -493,32 +502,32 @@ All endpoints live under `/api`, take and return JSON, and are defined as Zod sc
 
 **Endpoints**
 
-| Method + path | Purpose | Request | Response |
-| --- | --- | --- | --- |
-| `GET /health` | Status banner | — | `{gh: {authenticated, login?, error?}, llm: {configured, provider, model}, poller: {enabled, lastRunAt?, nextRunAt?, lastError?}, version}` |
-| `GET /settings` | Read config | — | `AppConfig` |
-| `PUT /settings` | Update config | `Partial<AppConfig>` | `AppConfig` |
-| `GET /inbox` | PRs requesting your review | — | `InboxItem[]` |
-| `POST /poll` | Poll now | — | `{started: true}` |
-| `GET /projects` | All rules files | — | `ProjectSummary[]` = `{repo, enabled, valid, ruleCount, updatedAt, errorCount}` |
-| `GET /projects/:owner/:repo` | One rules file | — | `{repo, yaml, valid, parsed?, errors[]}` |
-| `PUT /projects/:owner/:repo` | Create or save | `{yaml}` | same as above; `422` if invalid (not saved) |
-| `DELETE /projects/:owner/:repo` | Delete rules | — | `204` |
-| `POST /projects/validate` | Live validation | `{yaml}` | `{valid, errors[]}` |
-| `GET /projects/template?repo=` | Starter YAML | — | `{yaml}` |
-| `GET /reviews` | List / history | query `status?`, `repo?`, `limit?`, `cursor?` | `{items: ReviewSummary[], nextCursor?}` |
-| `POST /reviews` | Manual review | `{prUrl}` | `ReviewSummary` (status `queued`) |
-| `GET /reviews/:id` | Full draft | — | `ReviewDetail` |
-| `GET /reviews/:id/diff` | Parsed diff | — | `DiffFile[]` (section 7.4 shape) |
-| `PATCH /reviews/:id` | Edit summary/verdict | `{summary?, verdict?}` | `ReviewDetail` |
-| `POST /reviews/:id/comments` | Add your comment | `{path, line, side, body, severity}` | `ReviewComment` |
-| `PATCH /reviews/:id/comments/:cid` | Edit comment | `{body?, severity?, included?, suggestion?}` | `ReviewComment` |
-| `DELETE /reviews/:id/comments/:cid` | Remove | — | `204` |
-| `POST /reviews/:id/rerun` | Re-review | — | new `ReviewSummary` |
-| `POST /reviews/:id/dismiss` | Don't publish | — | `ReviewSummary` |
-| `POST /reviews/:id/publish` | Push to GitHub | `{mode: 'pending' \| 'submit', event?, force?, replacePending?}` | `{status, githubReviewUrl, publishedComments, foldedIntoSummary}`; `409` with code `HEAD_MOVED` or `PENDING_EXISTS` |
-| `GET /activity` | History log | query `limit?`, `cursor?` | `{items: ActivityEntry[], nextCursor?}` |
-| `GET /events` | Live updates (SSE) | — | event stream |
+| Method + path                       | Purpose                    | Request                                                          | Response                                                                                                                                    |
+| ----------------------------------- | -------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /health`                       | Status banner              | —                                                                | `{gh: {authenticated, login?, error?}, llm: {configured, provider, model}, poller: {enabled, lastRunAt?, nextRunAt?, lastError?}, version}` |
+| `GET /settings`                     | Read config                | —                                                                | `AppConfig`                                                                                                                                 |
+| `PUT /settings`                     | Update config              | `Partial<AppConfig>`                                             | `AppConfig`                                                                                                                                 |
+| `GET /inbox`                        | PRs requesting your review | —                                                                | `InboxItem[]`                                                                                                                               |
+| `POST /poll`                        | Poll now                   | —                                                                | `{started: true}`                                                                                                                           |
+| `GET /projects`                     | All rules files            | —                                                                | `ProjectSummary[]` = `{repo, enabled, valid, ruleCount, updatedAt, errorCount}`                                                             |
+| `GET /projects/:owner/:repo`        | One rules file             | —                                                                | `{repo, yaml, valid, parsed?, errors[]}`                                                                                                    |
+| `PUT /projects/:owner/:repo`        | Create or save             | `{yaml}`                                                         | same as above; `422` if invalid (not saved)                                                                                                 |
+| `DELETE /projects/:owner/:repo`     | Delete rules               | —                                                                | `204`                                                                                                                                       |
+| `POST /projects/validate`           | Live validation            | `{yaml}`                                                         | `{valid, errors[]}`                                                                                                                         |
+| `GET /projects/template?repo=`      | Starter YAML               | —                                                                | `{yaml}`                                                                                                                                    |
+| `GET /reviews`                      | List / history             | query `status?`, `repo?`, `limit?`, `cursor?`                    | `{items: ReviewSummary[], nextCursor?}`                                                                                                     |
+| `POST /reviews`                     | Manual review              | `{prUrl}`                                                        | `ReviewSummary` (status `queued`)                                                                                                           |
+| `GET /reviews/:id`                  | Full draft                 | —                                                                | `ReviewDetail`                                                                                                                              |
+| `GET /reviews/:id/diff`             | Parsed diff                | —                                                                | `DiffFile[]` (section 7.4 shape)                                                                                                            |
+| `PATCH /reviews/:id`                | Edit summary/verdict       | `{summary?, verdict?}`                                           | `ReviewDetail`                                                                                                                              |
+| `POST /reviews/:id/comments`        | Add your comment           | `{path, line, side, body, severity}`                             | `ReviewComment`                                                                                                                             |
+| `PATCH /reviews/:id/comments/:cid`  | Edit comment               | `{body?, severity?, included?, suggestion?}`                     | `ReviewComment`                                                                                                                             |
+| `DELETE /reviews/:id/comments/:cid` | Remove                     | —                                                                | `204`                                                                                                                                       |
+| `POST /reviews/:id/rerun`           | Re-review                  | —                                                                | new `ReviewSummary`                                                                                                                         |
+| `POST /reviews/:id/dismiss`         | Don't publish              | —                                                                | `ReviewSummary`                                                                                                                             |
+| `POST /reviews/:id/publish`         | Push to GitHub             | `{mode: 'pending' \| 'submit', event?, force?, replacePending?}` | `{status, githubReviewUrl, publishedComments, foldedIntoSummary}`; `409` with code `HEAD_MOVED` or `PENDING_EXISTS`                         |
+| `GET /activity`                     | History log                | query `limit?`, `cursor?`                                        | `{items: ActivityEntry[], nextCursor?}`                                                                                                     |
+| `GET /events`                       | Live updates (SSE)         | —                                                                | event stream                                                                                                                                |
 
 **Key shapes**
 
@@ -555,12 +564,12 @@ RulesError = { path: string, message: string, line?: number, column?: number }
 
 **SSE events** (`packages/shared/src/events.ts`)
 
-| Event | Payload | Frontend reaction |
-| --- | --- | --- |
-| `review.updated` | `ReviewSummary` | Update the inbox row and invalidate that review's query |
-| `inbox.updated` | `{count}` | Refetch `/inbox` |
-| `poll.status` | `{state: 'running' \| 'idle' \| 'error', lastRunAt, nextRunAt, error?}` | Update the poll indicator |
-| `activity.created` | `ActivityEntry` | Prepend to History if open |
+| Event              | Payload                                                                 | Frontend reaction                                       |
+| ------------------ | ----------------------------------------------------------------------- | ------------------------------------------------------- |
+| `review.updated`   | `ReviewSummary`                                                         | Update the inbox row and invalidate that review's query |
+| `inbox.updated`    | `{count}`                                                               | Refetch `/inbox`                                        |
+| `poll.status`      | `{state: 'running' \| 'idle' \| 'error', lastRunAt, nextRunAt, error?}` | Update the poll indicator                               |
+| `activity.created` | `ActivityEntry`                                                         | Prepend to History if open                              |
 
 **Error codes** the UI must handle by name: `GH_NOT_AUTHENTICATED`, `GH_NOT_FOUND`, `GH_RATE_LIMITED`, `LLM_NOT_CONFIGURED`, `RULES_INVALID`, `NO_RULES`, `INVALID_STATE`, `HEAD_MOVED`, `PENDING_EXISTS`, `VALIDATION_ERROR`, `INTERNAL`.
 
@@ -572,7 +581,7 @@ Six screens, one goal: get you from "a PR needs my review" to "a good review is 
 
 - Left sidebar: Inbox (with a count badge), Projects, History, Settings.
 - Top bar: poll indicator ("Last checked 2 min ago · Next in 3 min", spinner while running) and a "Check now" button (`POST /poll`).
-- Health banner under the top bar when `/health` reports a problem, with the fix: "`gh` is not logged in — run `gh auth login`" or "No API key — add ANTHROPIC_API_KEY to .env (reviews will use the mock provider)".
+- Health banner under the top bar when `/health` reports a problem, with the fix: "`gh` is not logged in — run `gh auth login`" or "No API key — add OPENROUTER_API_KEY to .env, or select the mock provider".
 - One SSE connection for the app (`useEvents` hook) that updates TanStack Query caches; auto-reconnect with backoff.
 - Toasts for async results; a confirm dialog component for anything that touches GitHub publicly.
 - Light and dark theme following the system setting. Usable at 1280 px wide minimum; mobile is not a goal for v1.
@@ -666,7 +675,7 @@ Six phases; only Phase 0 is sequential (Codex first, because the contract must e
 
 - [ ] `context/` gathering with ignore paths and context files.
 - [ ] `checks/` for all five deterministic rule types, with tests.
-- [ ] `llm/`: provider interface, `MockProvider`, `AnthropicProvider` with forced tool output, validation + one retry, token budgeting.
+- [ ] `llm/`: provider interface, `MockProvider`, `OpenRouterProvider` with strict JSON Schema output, validation + one retry, token budgeting.
 - [ ] `prompt.ts` with snapshot tests.
 - [ ] `review/` orchestrator with post-processing; `db/` schema and migrations.
 - [ ] Endpoints: `POST /reviews` (runs inline for now), `GET /reviews`, `GET /reviews/:id`, `GET /reviews/:id/diff`, `PATCH`, comment CRUD, `rerun`, `dismiss`.
@@ -677,7 +686,7 @@ Six phases; only Phase 0 is sequential (Codex first, because the contract must e
 - [ ] Review detail page (section 9.3) except publish: header, left rail, rule checklist, DiffView, CommentCard, add-comment flow, unanchored list, read-only mode.
 - [ ] "Review a PR by URL" input wired to `POST /reviews`.
 
-**Done when:** you paste a real PR URL in the UI, a real Claude review appears with comments on the right lines, and edits to comments and summary survive a page reload. Mock-provider review works with the API key removed.
+**Done when:** you paste a real PR URL in the UI, a real OpenRouter-backed review appears with comments on the right lines, and edits to comments and summary survive a page reload. Mock-provider review works with the API key removed.
 
 ### Phase 3 — Publishing (backend) · Publish flow + Inbox (frontend)
 
@@ -722,16 +731,16 @@ Tests run without network access by default; the only real-GitHub and real-LLM r
 
 **Testing strategy**
 
-| Layer | What | Tool |
-| --- | --- | --- |
-| Shared | Schemas accept the section 5 example and reject broken variants | Vitest |
-| Diff parser | Fixture diffs (the six cases in Phase 1) → exact line maps | Vitest |
-| Checks | Each rule type: pass, fail, not applicable | Vitest |
-| Prompt | Snapshot of the built prompt for a fixture PR | Vitest snapshots |
-| Orchestrator | Full run with fake `gh` + `MockProvider`; invalid LLM output → retry → fail | Vitest |
-| Publish | Payload built correctly; 409 paths; invalid anchors folded | Vitest + fake `gh` |
-| API | Each route's happy path and main error via Fastify `inject` | Vitest |
-| Web components | DiffView, CommentCard, RuleChecklist, dialogs, inbox badges | Vitest + Testing Library + MSW |
+| Layer          | What                                                                        | Tool                           |
+| -------------- | --------------------------------------------------------------------------- | ------------------------------ |
+| Shared         | Schemas accept the section 5 example and reject broken variants             | Vitest                         |
+| Diff parser    | Fixture diffs (the six cases in Phase 1) → exact line maps                  | Vitest                         |
+| Checks         | Each rule type: pass, fail, not applicable                                  | Vitest                         |
+| Prompt         | Snapshot of the built prompt for a fixture PR                               | Vitest snapshots               |
+| Orchestrator   | Full run with fake `gh` + `MockProvider`; invalid LLM output → retry → fail | Vitest                         |
+| Publish        | Payload built correctly; 409 paths; invalid anchors folded                  | Vitest + fake `gh`             |
+| API            | Each route's happy path and main error via Fastify `inject`                 | Vitest                         |
+| Web components | DiffView, CommentCard, RuleChecklist, dialogs, inbox badges                 | Vitest + Testing Library + MSW |
 
 **Safety rules (non-negotiable, put in both agent files)**
 
@@ -770,7 +779,7 @@ Save this file as `docs/PLAN.md` in the repo, then start each agent with its pro
 
 ```
 You are the backend engineer for pr-reviewer, a local tool that reviews GitHub PRs
-against per-repo rules using the gh CLI and the Claude API.
+against per-repo rules using the gh CLI and OpenRouter.
 
 Read docs/PLAN.md fully. You own apps/server and packages/shared (sections 3, 4, 5,
 6, 7, 8). Claude Code owns apps/web; never edit it.
@@ -784,7 +793,7 @@ Do Phase 0 from section 10, Codex tasks only:
 - add docs/CONTRACT_CHANGES.md, docs/rules-example.yml, .env.example
 - minimal Fastify server on 127.0.0.1:4317 with GET /api/health
 
-Work on branch codex/phase-0. Stop when the Phase 0 "done when" checks pass, then
+Work on branch wiseman/phase-0. Stop when the Phase 0 "done when" checks pass, then
 open a PR listing each task and how you verified it. Do not start Phase 1.
 ```
 
@@ -814,7 +823,7 @@ open a PR listing each task and how you verified it. Do not start Phase 1.
 ```
 Re-read docs/PLAN.md sections <list> and docs/CONTRACT_CHANGES.md.
 Do Phase <N> from section 10, <Codex | Claude Code> tasks only, on branch
-<codex|claude>/phase-<N>. Write tests as described in section 11.
+<wiseman|claude>/phase-<N>. Write tests as described in section 11.
 Stop when that phase's "done when" checks pass and open a PR. Do not start the next
 phase.
 ```

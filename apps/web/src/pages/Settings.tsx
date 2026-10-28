@@ -138,13 +138,13 @@ export function Settings() {
             }
           />
           <Row
-            label="Anthropic API key"
+            label="OpenRouter API key"
             value={
               !h
                 ? '…'
                 : h.llm.configured
                   ? 'Set'
-                  : 'Not set — add ANTHROPIC_API_KEY to .env'
+                  : 'Not set — add OPENROUTER_API_KEY to .env'
             }
           />
           <Row
@@ -197,7 +197,7 @@ export function Settings() {
               })
             }
           >
-            <option value="anthropic">anthropic</option>
+            <option value="openrouter">openrouter</option>
             <option value="mock">mock</option>
           </select>
         </Field>

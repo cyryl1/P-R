@@ -1,7 +1,7 @@
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import { ReviewOutputSchema } from './api.js';
+import { ReviewOutputWireSchema } from './api.js';
 
-export const ReviewOutputJsonSchema = zodToJsonSchema(ReviewOutputSchema, {
+export const ReviewOutputJsonSchema = zodToJsonSchema(ReviewOutputWireSchema, {
   name: 'ReviewOutput',
   $refStrategy: 'none',
   target: 'jsonSchema7',

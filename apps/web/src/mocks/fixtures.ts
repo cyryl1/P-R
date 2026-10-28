@@ -21,7 +21,7 @@ const ahead = (minutes: number) =>
 
 export const healthOk: HealthResponse = {
   gh: { authenticated: true, login: 'cyryl1' },
-  llm: { configured: true, provider: 'anthropic', model: 'claude-sonnet-5-5' },
+  llm: { configured: true, provider: 'openrouter', model: 'openrouter/free' },
   poller: { enabled: true, lastRunAt: ago(2), nextRunAt: ahead(3) },
   version: '0.1.0',
 };
@@ -31,16 +31,16 @@ export const healthGhLoggedOut: HealthResponse = {
 };
 export const healthNoKey: HealthResponse = {
   ...healthOk,
-  llm: { configured: false, provider: 'mock', model: 'mock' },
+  llm: { configured: false, provider: 'openrouter', model: 'openrouter/free' },
 };
 
 export const settings: AppConfig = {
   server: { port: 4317 },
   poller: { enabled: true, interval_minutes: 5, include_team_requests: false },
   llm: {
-    provider: 'anthropic',
-    model: 'claude-sonnet-5-5',
-    max_input_tokens: 120000,
+    provider: 'openrouter',
+    model: 'openrouter/free',
+    max_input_tokens: 100000,
     max_output_tokens: 8000,
   },
   jobs: { concurrency: 1, max_retries: 2 },
@@ -190,8 +190,8 @@ export function reviewDetail(status: ReviewStatus): ReviewDetail {
     ...(hasDraft
       ? {
           llmMeta: {
-            provider: 'anthropic',
-            model: 'claude-sonnet-5-5',
+            provider: 'openrouter',
+            model: 'openrouter/free',
             inputTokens: 18200,
             outputTokens: 640,
             durationMs: 9400,
@@ -482,7 +482,10 @@ export const errorResponses: Record<
     status: 429,
     message: 'GitHub rate limit reached. Try again shortly.',
   },
-  LLM_NOT_CONFIGURED: { status: 503, message: 'ANTHROPIC_API_KEY is not set.' },
+  LLM_NOT_CONFIGURED: {
+    status: 503,
+    message: 'OPENROUTER_API_KEY is not set.',
+  },
   RULES_INVALID: {
     status: 422,
     message: 'The rules file is invalid.',
