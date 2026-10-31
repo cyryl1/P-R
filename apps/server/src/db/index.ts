@@ -4,10 +4,12 @@ import { dirname } from 'node:path';
 import initSqlJs, { type Database, type SqlValue } from 'sql.js';
 import { ulid } from 'ulid';
 import {
+  ActivityEntrySchema,
   ReviewCommentSchema,
   ReviewDetailSchema,
   ReviewSummarySchema,
   type ReviewComment,
+  type ActivityEntry,
   type ReviewDetail,
   type ReviewStatus,
   type ReviewSummary,
@@ -37,6 +39,17 @@ type ReviewPatch = {
 };
 
 export type NewComment = Omit<ReviewComment, 'id'>;
+export type InboxPr = {
+  id: number;
+  repo: string;
+  number: number;
+  title: string;
+  author: string;
+  url: string;
+  headSha: string;
+  isDraft: boolean;
+  updatedAt: string;
+};
 
 const migrations = `
 PRAGMA foreign_keys = ON;
@@ -106,7 +119,8 @@ PRAGMA user_version = 1;
 `;
 
 function asString(value: SqlValue | undefined): string {
-  if (value === undefined) throw new Error('Database row is missing a required value');
+  if (value === undefined)
+    throw new Error('Database row is missing a required value');
   return String(value);
 }
 
@@ -182,18 +196,23 @@ export class ReviewDatabase {
     await rename(temporary, this.path);
   }
 
-  async upsertPr(repo: string, pr: GhPr): Promise<number> {
+  async upsertPr(
+    repo: string,
+    pr: GhPr,
+    options: { reviewRequested?: boolean } = {},
+  ): Promise<number> {
     const now = new Date().toISOString();
     this.database.run(
       `INSERT INTO prs
        (repo, number, title, body, author, url, head_sha, base_ref, head_ref,
-        is_draft, additions, deletions, first_seen_at, last_seen_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        is_draft, additions, deletions, review_requested, first_seen_at, last_seen_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(repo, number) DO UPDATE SET
          title=excluded.title, body=excluded.body, author=excluded.author,
          url=excluded.url, head_sha=excluded.head_sha, base_ref=excluded.base_ref,
          head_ref=excluded.head_ref, is_draft=excluded.is_draft,
          additions=excluded.additions, deletions=excluded.deletions,
+         review_requested=CASE WHEN ? IS NULL THEN prs.review_requested ELSE excluded.review_requested END,
          last_seen_at=excluded.last_seen_at`,
       [
         repo,
@@ -208,8 +227,14 @@ export class ReviewDatabase {
         pr.isDraft ? 1 : 0,
         pr.additions,
         pr.deletions,
+        options.reviewRequested === undefined
+          ? 0
+          : options.reviewRequested
+            ? 1
+            : 0,
         now,
         now,
+        options.reviewRequested === undefined ? null : 1,
       ],
     );
     await this.persist();
@@ -233,7 +258,15 @@ export class ReviewDatabase {
       `INSERT INTO reviews
        (id, pr_id, head_sha, trigger, status, rules_snapshot, created_at, updated_at)
        VALUES (?, ?, ?, ?, 'queued', ?, ?, ?)`,
-      [id, input.prId, input.headSha, input.trigger, JSON.stringify(input.rules), now, now],
+      [
+        id,
+        input.prId,
+        input.headSha,
+        input.trigger,
+        JSON.stringify(input.rules),
+        now,
+        now,
+      ],
     );
     await this.persist();
     return this.getSummary(id)!;
@@ -251,7 +284,8 @@ export class ReviewDatabase {
     if (patch.verdict !== undefined) add('verdict', patch.verdict);
     if (patch.ruleResults !== undefined)
       add('rule_results', JSON.stringify(patch.ruleResults));
-    if (patch.llmMeta !== undefined) add('llm_meta', JSON.stringify(patch.llmMeta));
+    if (patch.llmMeta !== undefined)
+      add('llm_meta', JSON.stringify(patch.llmMeta));
     if (patch.diff !== undefined) add('diff_json', JSON.stringify(patch.diff));
     if (patch.error !== undefined) add('error', patch.error);
     if (patch.githubReviewId !== undefined)
@@ -261,8 +295,12 @@ export class ReviewDatabase {
     if (patch.publishedAt !== undefined) add('published_at', patch.publishedAt);
     add('updated_at', new Date().toISOString());
     values.push(id);
-    this.database.run(`UPDATE reviews SET ${columns.join(', ')} WHERE id=?`, values);
-    if (this.database.getRowsModified() === 0) throw new Error('Review not found');
+    this.database.run(
+      `UPDATE reviews SET ${columns.join(', ')} WHERE id=?`,
+      values,
+    );
+    if (this.database.getRowsModified() === 0)
+      throw new Error('Review not found');
     await this.persist();
     return this.getReview(id)!;
   }
@@ -270,7 +308,9 @@ export class ReviewDatabase {
   async replaceComments(reviewId: string, comments: NewComment[]) {
     this.database.run('BEGIN');
     try {
-      this.database.run('DELETE FROM review_comments WHERE review_id=?', [reviewId]);
+      this.database.run('DELETE FROM review_comments WHERE review_id=?', [
+        reviewId,
+      ]);
       for (const comment of comments) this.insertComment(reviewId, comment);
       this.database.run('COMMIT');
     } catch (error) {
@@ -365,7 +405,9 @@ export class ReviewDatabase {
 
   getDiff(id: string): DiffFile[] | undefined {
     const row = this.one('SELECT diff_json FROM reviews WHERE id=?', [id]);
-    return row ? (JSON.parse(asString(row.diff_json)) as DiffFile[]) : undefined;
+    return row
+      ? (JSON.parse(asString(row.diff_json)) as DiffFile[])
+      : undefined;
   }
 
   getSummary(id: string): ReviewSummary | undefined {
@@ -410,12 +452,14 @@ export class ReviewDatabase {
     });
   }
 
-  listReviews(options: {
-    status?: ReviewStatus;
-    repo?: string;
-    limit?: number;
-    cursor?: string;
-  } = {}): { items: ReviewSummary[]; nextCursor?: string } {
+  listReviews(
+    options: {
+      status?: ReviewStatus;
+      repo?: string;
+      limit?: number;
+      cursor?: string;
+    } = {},
+  ): { items: ReviewSummary[]; nextCursor?: string } {
     const where: string[] = [];
     const parameters: SqlValue[] = [];
     if (options.status) {
@@ -444,6 +488,59 @@ export class ReviewDatabase {
     };
   }
 
+  listInboxPrs(): InboxPr[] {
+    return this.all(
+      `SELECT id, repo, number, title, author, url, head_sha, is_draft, last_seen_at
+       FROM prs WHERE review_requested=1 ORDER BY last_seen_at DESC`,
+    ).map((row) => ({
+      id: Number(row.id),
+      repo: asString(row.repo),
+      number: Number(row.number),
+      title: asString(row.title),
+      author: asString(row.author),
+      url: asString(row.url),
+      headSha: asString(row.head_sha),
+      isDraft: Boolean(row.is_draft),
+      updatedAt: asString(row.last_seen_at),
+    }));
+  }
+
+  getLatestReviewForPr(
+    repo: string,
+    number: number,
+  ): ReviewSummary | undefined {
+    const row = this.reviewRows(
+      'WHERE p.repo=? AND p.number=? ORDER BY r.created_at DESC LIMIT 1',
+      [repo, number],
+    )[0];
+    return row ? this.toSummary(row) : undefined;
+  }
+
+  async addActivity(
+    input: Omit<ActivityEntry, 'id' | 'ts'>,
+  ): Promise<ActivityEntry> {
+    const entry = ActivityEntrySchema.parse({
+      id: ulid(),
+      ts: new Date().toISOString(),
+      ...input,
+    });
+    this.database.run(
+      `INSERT INTO activity (id, ts, level, type, message, review_id, pr_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        entry.id,
+        entry.ts,
+        entry.level,
+        entry.type,
+        entry.message,
+        entry.reviewId ?? null,
+        entry.prId ?? null,
+      ],
+    );
+    await this.persist();
+    return entry;
+  }
+
   private reviewRows(suffix: string, parameters: SqlValue[]): Row[] {
     return this.all(
       `SELECT r.*, p.repo, p.number, p.title, p.body, p.author, p.url,
@@ -468,7 +565,9 @@ export class ReviewDatabase {
       blockerCount: Number(row.blocker_count),
       createdAt: asString(row.created_at),
       updatedAt: asString(row.updated_at),
-      ...(optionalString(row.error) ? { error: optionalString(row.error)! } : {}),
+      ...(optionalString(row.error)
+        ? { error: optionalString(row.error)! }
+        : {}),
     });
   }
 
@@ -487,7 +586,9 @@ export class ReviewDatabase {
       line: Number(row.line),
       side: asString(row.side),
       severity: asString(row.severity),
-      ...(optionalString(row.rule_id) ? { ruleId: optionalString(row.rule_id)! } : {}),
+      ...(optionalString(row.rule_id)
+        ? { ruleId: optionalString(row.rule_id)! }
+        : {}),
       body: asString(row.body),
       ...(optionalString(row.suggestion)
         ? { suggestion: optionalString(row.suggestion)! }

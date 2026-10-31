@@ -45,8 +45,8 @@ const gh: GhClient = {
   getDiff: async () => diff,
   getFile: async () => 'Review carefully.',
   listReviews: async () => [],
-  createReview: async () => ({}),
-  submitReview: async () => ({}),
+  createReview: async () => ({ id: 1, state: 'PENDING' }),
+  submitReview: async () => ({ id: 1, state: 'COMMENTED' }),
   deletePendingReview: async () => undefined,
 };
 
@@ -79,8 +79,16 @@ rules:
   await saveRules(paths, 'acme/billing', rules);
   const database = await ReviewDatabase.open(paths.database);
   databases.push(database);
-  const config = AppConfigSchema.parse({ llm: { provider: 'mock', model: 'mock' } });
-  const service = new ReviewService(database, gh, new MockProvider(), paths, config);
+  const config = AppConfigSchema.parse({
+    llm: { provider: 'mock', model: 'mock' },
+  });
+  const service = new ReviewService(
+    database,
+    gh,
+    new MockProvider(),
+    paths,
+    config,
+  );
   return { home, paths, database, config, service };
 }
 
@@ -104,17 +112,33 @@ describe('review orchestration', () => {
     const summary = await service.create(pr.url);
     expect(summary).toMatchObject({ status: 'draft_ready', commentCount: 1 });
     const detail = service.get(summary.id);
-    expect(detail.comments[0]).toMatchObject({ path: 'src/pay.ts', line: 2, anchorStatus: 'valid' });
-    expect(detail.ruleResults).toEqual(expect.arrayContaining([
-      expect.objectContaining({ ruleId: 'tests', status: 'fail' }),
-      expect.objectContaining({ ruleId: 'safety', status: 'unsure' }),
-    ]));
-    await service.edit(summary.id, { verdict: 'REQUEST_CHANGES', summary: 'Edited summary.' });
+    expect(detail.comments[0]).toMatchObject({
+      path: 'src/pay.ts',
+      line: 2,
+      anchorStatus: 'valid',
+    });
+    expect(detail.ruleResults).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ ruleId: 'tests', status: 'fail' }),
+        expect.objectContaining({ ruleId: 'safety', status: 'unsure' }),
+      ]),
+    );
+    await service.edit(summary.id, {
+      verdict: 'REQUEST_CHANGES',
+      summary: 'Edited summary.',
+    });
     const added = await service.addComment(summary.id, {
-      path: 'src/pay.ts', line: 2, side: 'RIGHT', severity: 'major', body: 'Handle the failure.',
+      path: 'src/pay.ts',
+      line: 2,
+      side: 'RIGHT',
+      severity: 'major',
+      body: 'Handle the failure.',
     });
     await service.editComment(summary.id, added.id, { included: false });
-    expect(service.get(summary.id)).toMatchObject({ verdict: 'REQUEST_CHANGES', summary: 'Edited summary.' });
+    expect(service.get(summary.id)).toMatchObject({
+      verdict: 'REQUEST_CHANGES',
+      summary: 'Edited summary.',
+    });
     expect(await readFile(paths.database)).not.toHaveLength(0);
     database.close();
     databases.pop();
@@ -147,15 +171,27 @@ describe('review orchestration', () => {
     const { paths, config, service } = await fixture();
     const summary = await service.create(pr.url);
     const app = createServer({ paths, config, gh, reviews: service });
-    const response = await app.inject({ method: 'GET', url: `/api/reviews/${summary.id}`, headers: { host: 'localhost' } });
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/reviews/${summary.id}`,
+      headers: { host: 'localhost' },
+    });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({ id: summary.id, status: 'draft_ready' });
+    expect(response.json()).toMatchObject({
+      id: summary.id,
+      status: 'draft_ready',
+    });
     const patch = await app.inject({
-      method: 'PATCH', url: `/api/reviews/${summary.id}`, headers: { host: 'localhost' }, payload: { summary: 'API edit' },
+      method: 'PATCH',
+      url: `/api/reviews/${summary.id}`,
+      headers: { host: 'localhost' },
+      payload: { summary: 'API edit' },
     });
     expect(patch.statusCode).toBe(200);
     await service.dismiss(summary.id);
-    await expect(service.edit(summary.id, { summary: 'too late' })).rejects.toBeInstanceOf(ReviewStateError);
+    await expect(
+      service.edit(summary.id, { summary: 'too late' }),
+    ).rejects.toBeInstanceOf(ReviewStateError);
     await app.close();
   });
 
