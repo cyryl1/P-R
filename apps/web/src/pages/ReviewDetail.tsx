@@ -1,5 +1,6 @@
 import { RefreshCw } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
+import { ApiError } from '@/api/client';
 import { useRerunReview, useReview, useReviewDiff } from '@/api/hooks';
 import { ErrorState, LoadingState } from '@/components/ErrorState';
 import { ActionBar } from '@/components/review/ActionBar';
@@ -11,6 +12,7 @@ import {
   isEditable,
 } from '@/components/review/StatusBadge';
 import { Button } from '@/components/ui/button';
+import { useCommentShortcuts } from '@/lib/useCommentShortcuts';
 
 export function ReviewDetail() {
   const { id = '' } = useParams();
@@ -19,10 +21,21 @@ export function ReviewDetail() {
     !!review.data && !IN_PROGRESS_STATUSES.includes(review.data.status);
   const diff = useReviewDiff(ready ? id : '');
   const rerun = useRerunReview(id);
+  useCommentShortcuts(!!review.data);
 
   if (review.isPending) return <LoadingState label="Loading review…" />;
   if (review.isError)
-    return <ErrorState error={review.error} onRetry={() => review.refetch()} />;
+    return review.error instanceof ApiError &&
+      review.error.code === 'GH_NOT_FOUND' ? (
+      <div className="space-y-2">
+        <ErrorState error={review.error} />
+        <Link to="/" className="text-sm underline">
+          Back to Inbox
+        </Link>
+      </div>
+    ) : (
+      <ErrorState error={review.error} onRetry={() => review.refetch()} />
+    );
   const data = review.data;
 
   if (IN_PROGRESS_STATUSES.includes(data.status))

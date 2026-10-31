@@ -37,6 +37,10 @@ export function ActionBar({ review }: { review: ReviewDetail }) {
         {review.comments.length} comments · {blockers} blockers · {excluded}{' '}
         excluded
       </p>
+      <p className="hidden text-xs text-muted-foreground xl:block">
+        <kbd>j</kbd>/<kbd>k</kbd> next/previous comment · <kbd>⌘</kbd>
+        <kbd>↵</kbd> save
+      </p>
       <div className="ml-auto flex gap-2">
         <Button variant="outline" disabled={rerun.isPending} onClick={doRerun}>
           Rerun

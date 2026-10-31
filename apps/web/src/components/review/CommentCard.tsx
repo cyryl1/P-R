@@ -47,8 +47,10 @@ export function CommentCard({
   return (
     <article
       aria-label={`${comment.source === 'user' ? 'Your' : 'AI'} comment`}
+      data-comment-card
+      tabIndex={-1}
       className={cn(
-        'rounded-md border border-l-4 bg-background p-3 text-left font-sans',
+        'rounded-md border border-l-4 bg-background p-3 text-left font-sans focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
         comment.source === 'user' ? 'border-l-primary' : 'border-l-warning',
         !comment.included && 'opacity-50',
       )}
@@ -107,6 +109,14 @@ export function CommentCard({
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onBlur={saveBody}
+          onKeyDown={(e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter')
+              e.currentTarget.blur();
+            if (e.key === 'Escape') {
+              setDraft(comment.body);
+              setEditing(false);
+            }
+          }}
         />
       ) : editable ? (
         <button

@@ -3,9 +3,12 @@ import { ChevronDown, ChevronRight, Plus } from 'lucide-react';
 import { useState } from 'react';
 import type { DiffFile } from '@/api/types';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { AddCommentForm } from './AddCommentForm';
 import { CommentCard } from './CommentCard';
+
+const LARGE_DIFF_FILES = 8;
 
 type Line = DiffFile['hunks'][number]['lines'][number];
 
@@ -35,10 +38,19 @@ export function DiffView({
   editable: boolean;
 }) {
   // Contract has no "ignored" flag; files with no hunks (and not binary) are treated as ignored.
-  const isCollapsedByDefault = (f: DiffFile) => !f.isBinary && !f.hunks.length;
+  const isIgnored = (f: DiffFile) => !f.isBinary && !f.hunks.length;
+  // On big PRs only files with comments open by default; rendering every hunk is slow.
+  const commentedPaths = new Set(
+    comments.filter((c) => c.anchorStatus === 'valid').map((c) => c.path),
+  );
+  const isCollapsedByDefault = (f: DiffFile) =>
+    isIgnored(f) ||
+    (files.length > LARGE_DIFF_FILES && !commentedPaths.has(f.path));
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(files.map((f) => [f.path, isCollapsedByDefault(f)])),
   );
+  const setAll = (value: boolean) =>
+    setCollapsed(Object.fromEntries(files.map((f) => [f.path, value])));
   const [adding, setAdding] = useState<string>();
 
   const inline = comments.filter((c) => c.anchorStatus === 'valid');
@@ -47,8 +59,26 @@ export function DiffView({
       (c) => c.path === path && c.line === a.line && c.side === a.side,
     );
 
+  if (!files.length)
+    return (
+      <p className="text-sm text-muted-foreground">
+        This PR has no changed files.
+      </p>
+    );
+
   return (
     <div className="space-y-4">
+      {files.length > 1 ? (
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-muted-foreground">{files.length} files</span>
+          <Button variant="ghost" size="sm" onClick={() => setAll(false)}>
+            Expand all
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setAll(true)}>
+            Collapse all
+          </Button>
+        </div>
+      ) : null}
       {files.map((file) => {
         const isCollapsed = collapsed[file.path] ?? isCollapsedByDefault(file);
         const count = inline.filter((c) => c.path === file.path).length;

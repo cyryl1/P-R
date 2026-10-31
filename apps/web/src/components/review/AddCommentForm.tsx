@@ -48,6 +48,11 @@ export function AddCommentForm({
         rows={3}
         value={body}
         onChange={(e) => setBody(e.target.value)}
+        onKeyDown={(e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key === 'Enter')
+            e.currentTarget.form?.requestSubmit();
+          if (e.key === 'Escape') onDone();
+        }}
       />
       <div className="flex items-center gap-2">
         <select

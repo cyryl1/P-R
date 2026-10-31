@@ -65,6 +65,10 @@ export function ReviewRail({
           value={summary}
           onChange={(e) => setSummary(e.target.value)}
           onBlur={() => summary !== review.summary && save({ summary })}
+          onKeyDown={(e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter')
+              e.currentTarget.blur();
+          }}
         />
       </div>
       {review.llmMeta?.truncation?.length ? (
