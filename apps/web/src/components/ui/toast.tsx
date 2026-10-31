@@ -9,13 +9,18 @@ import {
 import { cn } from '@/lib/utils';
 
 type ToastKind = 'success' | 'error';
+export interface ToastAction {
+  label: string;
+  href: string;
+}
 interface ToastItem {
   id: number;
   kind: ToastKind;
   message: string;
+  action?: ToastAction | undefined;
 }
 interface ToastApi {
-  success: (message: string) => void;
+  success: (message: string, action?: ToastAction) => void;
   error: (message: string) => void;
 }
 
@@ -24,17 +29,20 @@ let nextId = 0;
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([]);
-  const push = useCallback((kind: ToastKind, message: string) => {
-    const id = nextId++;
-    setItems((current) => [...current, { id, kind, message }]);
-    setTimeout(
-      () => setItems((current) => current.filter((item) => item.id !== id)),
-      5000,
-    );
-  }, []);
+  const push = useCallback(
+    (kind: ToastKind, message: string, action?: ToastAction) => {
+      const id = nextId++;
+      setItems((current) => [...current, { id, kind, message, action }]);
+      setTimeout(
+        () => setItems((current) => current.filter((item) => item.id !== id)),
+        action ? 12000 : 5000,
+      );
+    },
+    [],
+  );
   const api = useMemo<ToastApi>(
     () => ({
-      success: (m) => push('success', m),
+      success: (m, action) => push('success', m, action),
       error: (m) => push('error', m),
     }),
     [push],
@@ -59,6 +67,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             )}
           >
             {item.message}
+            {item.action ? (
+              <a
+                href={item.action.href}
+                target="_blank"
+                rel="noreferrer"
+                className="ml-2 font-medium underline"
+              >
+                {item.action.label}
+              </a>
+            ) : null}
           </div>
         ))}
       </div>
