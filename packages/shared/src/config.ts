@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+export const DEFAULT_OPENROUTER_MODEL =
+  'nvidia/nemotron-3.5-super-vl:free';
+
 export const AppConfigSchema = z.object({
   server: z
     .object({ port: z.number().int().min(1).max(65535).default(4317) })
@@ -14,7 +17,7 @@ export const AppConfigSchema = z.object({
   llm: z
     .object({
       provider: z.enum(['openrouter', 'mock']).default('openrouter'),
-      model: z.string().default('openrouter/free'),
+      model: z.string().default(DEFAULT_OPENROUTER_MODEL),
       max_input_tokens: z.number().int().positive().default(100000),
       max_output_tokens: z.number().int().positive().default(8000),
     })

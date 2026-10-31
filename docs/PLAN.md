@@ -30,7 +30,7 @@ v1 is a local web app that watches GitHub for PRs where you are requested as a r
 | Repo shape    | pnpm monorepo: `apps/server`, `apps/web`, `packages/shared`  | Clear ownership lines between the two agents.                                               |
 | GitHub access | `gh` CLI via child process                                   | Your existing login and permissions, no tokens to manage.                                   |
 | Detection     | Polling `gh search prs` every 5 minutes                      | No public server or webhooks needed.                                                        |
-| LLM           | OpenRouter behind a provider interface, plus a mock provider | `openrouter/free` provides zero-cost inference; mock keeps tests deterministic and offline. |
+| LLM           | OpenRouter behind a provider interface, plus a mock provider | `nvidia/nemotron-3.5-super-vl:free` provides zero-cost structured output; mock keeps tests deterministic and offline. |
 | Storage       | SQLite for state, YAML files on disk for rules               | Rules stay human-editable and live inside the tool's data folder, never in a project repo.  |
 | Ownership     | Codex: backend + shared contract. Claude Code: frontend.     | Requested split.                                                                            |
 
@@ -123,7 +123,7 @@ One pnpm workspace, Node 20+, TypeScript strict mode in every package. `pnpm dev
 | Validation / contract | Zod (schemas exported from `packages/shared`)                                    | Codex            |
 | Database              | SQLite via portable `sql.js` with versioned SQL migrations                       | Codex            |
 | YAML                  | `yaml` package (keeps comments when re-saving)                                   | Codex            |
-| LLM                   | OpenRouter chat completions API, model set in config (default `openrouter/free`) | Codex            |
+| LLM                   | OpenRouter chat completions API, model set in config (default `nvidia/nemotron-3.5-super-vl:free`) | Codex            |
 | Process exec          | `execa` wrapper around `gh`                                                      | Codex            |
 | Frontend build        | Vite + React 18 + TypeScript                                                     | Claude Code      |
 | Routing / data        | React Router, TanStack Query                                                     | Claude Code      |
@@ -278,7 +278,7 @@ poller:
   include_team_requests: false # false = direct requests only
 llm:
   provider: openrouter # openrouter | mock
-  model: openrouter/free
+  model: nvidia/nemotron-3.5-super-vl:free
   max_input_tokens: 100000
   max_output_tokens: 8000
 jobs:
@@ -435,7 +435,7 @@ interface ReviewProvider {
 }
 ```
 
-- `OpenRouterProvider`: uses chat completions with strict JSON Schema output and `provider.require_parameters = true`. Parse the response and validate it with Zod; on schema failure retry once with validation feedback. Do not retry HTTP or quota errors. Record the actual model selected by `openrouter/free` in `llm_meta`.
+- `OpenRouterProvider`: uses chat completions with strict JSON Schema output and `provider.require_parameters = true`. Parse the response and validate it with Zod; on schema failure retry once with validation feedback. Do not retry HTTP or quota errors. Record the actual model returned by OpenRouter in `llm_meta`.
 - `MockProvider`: returns a deterministic `ReviewOutput` built from the diff (e.g. one comment on the first added line of each file). Used by tests, by `--provider mock`, and when no API key is set and the user opts in.
 - `ReviewOutput` shape:
 

@@ -21,7 +21,7 @@ describe('health endpoint', () => {
       llm: {
         configured: true,
         provider: 'openrouter',
-        model: 'openrouter/free',
+        model: 'nvidia/nemotron-3.5-super-vl:free',
       },
       poller: { enabled: true },
     });
