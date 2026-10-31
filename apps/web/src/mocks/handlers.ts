@@ -141,10 +141,17 @@ export const handlers: HttpHandler[] = [
       const url = new URL(request.url);
       const status = url.searchParams.get('status');
       const repo = url.searchParams.get('repo');
-      const items = f.reviewSummaries.filter(
+      const matching = f.reviewSummaries.filter(
         (r) => (!status || r.status === status) && (!repo || r.repo === repo),
       );
-      return HttpResponse.json({ items });
+      const limit = Number(url.searchParams.get('limit') ?? matching.length);
+      const start = Number(url.searchParams.get('cursor') ?? 0);
+      const items = matching.slice(start, start + limit);
+      const next = start + limit;
+      return HttpResponse.json({
+        items,
+        ...(next < matching.length ? { nextCursor: String(next) } : {}),
+      });
     }),
   ),
   http.post(
@@ -241,6 +248,17 @@ export const handlers: HttpHandler[] = [
     }),
   ),
 
+  // Keeps the connection open with only a heartbeat so EventSource doesn't reconnect-loop.
+  http.get('/api/events', () => {
+    const encoder = new TextEncoder();
+    return new HttpResponse(
+      new ReadableStream({
+        start: (controller) =>
+          controller.enqueue(encoder.encode(': connected\n\n')),
+      }),
+      { headers: { 'content-type': 'text/event-stream' } },
+    );
+  }),
   http.get(
     '/api/activity',
     route(() => HttpResponse.json({ items: f.activity })),

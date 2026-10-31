@@ -1,5 +1,6 @@
 import { createBrowserRouter, type RouteObject } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
+import { History } from '@/pages/History';
 import { Inbox } from '@/pages/Inbox';
 import { Placeholder } from '@/pages/Placeholder';
 import { ProjectEditor } from '@/pages/ProjectEditor';
@@ -18,7 +19,7 @@ export const routes: RouteObject[] = [
       },
       { path: '/projects', element: <Projects /> },
       { path: '/projects/:owner/:repo', element: <ProjectEditor /> },
-      { path: '/history', element: <Placeholder title="History" phase={4} /> },
+      { path: '/history', element: <History /> },
       { path: '/settings', element: <Settings /> },
       { path: '*', element: <Placeholder title="Not found" phase={0} /> },
     ],
