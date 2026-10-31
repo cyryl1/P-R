@@ -13,6 +13,7 @@ import { createGhClient, type GhClient } from './gh/client.js';
 import { registerProjectRoutes } from './api/projects.js';
 import { registerReviewRoutes } from './api/reviews.js';
 import { registerInboxRoutes } from './api/inbox.js';
+import { registerSettingsRoutes, SettingsService } from './api/settings.js';
 import { ReviewDatabase } from './db/index.js';
 import { createReviewProvider } from './llm/index.js';
 import { ReviewService } from './review/index.js';
@@ -32,7 +33,7 @@ export type ServerOptions = {
 
 export function createServer(options: ServerOptions = {}) {
   const app = Fastify({ logger: true });
-  const config = options.config ?? AppConfigSchema.parse({});
+  let config = options.config ?? AppConfigSchema.parse({});
   const paths = options.paths ?? resolveDataPaths();
   const gh = options.gh ?? createGhClient();
   const env = options.env ?? process.env;
@@ -70,6 +71,11 @@ export function createServer(options: ServerOptions = {}) {
     );
   });
   registerProjectRoutes(app, paths);
+  const settings = new SettingsService(paths, config, (updated) => {
+    config = updated;
+    options.reviews?.configure(updated, env);
+  });
+  registerSettingsRoutes(app, settings);
   if (options.reviews) {
     const publisher =
       options.publisher ?? new PublishService(options.reviews.database, gh);
