@@ -14,11 +14,17 @@ import { registerProjectRoutes } from './api/projects.js';
 import { registerReviewRoutes } from './api/reviews.js';
 import { registerInboxRoutes } from './api/inbox.js';
 import { registerSettingsRoutes, SettingsService } from './api/settings.js';
+import { registerActivityRoutes } from './api/activity.js';
+import { registerEventRoutes } from './api/events.js';
+import { registerPollRoutes } from './api/poll.js';
 import { ReviewDatabase } from './db/index.js';
 import { createReviewProvider } from './llm/index.js';
 import { ReviewService } from './review/index.js';
 import { PublishService } from './publish/index.js';
 import { InboxService } from './inbox/index.js';
+import { EventHub } from './events/index.js';
+import { JobQueue } from './jobs/index.js';
+import { Poller } from './poller/index.js';
 
 export type ServerOptions = {
   config?: AppConfig;
@@ -29,6 +35,9 @@ export type ServerOptions = {
   reviews?: ReviewService;
   publisher?: PublishService;
   inbox?: InboxService;
+  events?: EventHub;
+  jobs?: JobQueue;
+  poller?: Poller;
 };
 
 export function createServer(options: ServerOptions = {}) {
@@ -37,6 +46,7 @@ export function createServer(options: ServerOptions = {}) {
   const paths = options.paths ?? resolveDataPaths();
   const gh = options.gh ?? createGhClient();
   const env = options.env ?? process.env;
+  const events = options.events ?? new EventHub();
   app.addHook('onRequest', async (request, reply) => {
     const host = request.headers.host?.split(':')[0]?.toLowerCase();
     if (host !== '127.0.0.1' && host !== 'localhost') {
@@ -46,6 +56,7 @@ export function createServer(options: ServerOptions = {}) {
     }
   });
   app.get('/api/health', async (_request, reply) => {
+    const pollStatus = options.poller?.getStatus();
     let ghStatus: { authenticated: boolean; login?: string; error?: string };
     try {
       const auth = await gh.authStatus();
@@ -65,25 +76,42 @@ export function createServer(options: ServerOptions = {}) {
           provider: config.llm.provider,
           model: config.llm.model,
         },
-        poller: { enabled: config.poller.enabled },
+        poller: {
+          enabled: config.poller.enabled,
+          ...(pollStatus?.lastRunAt
+            ? { lastRunAt: pollStatus.lastRunAt }
+            : {}),
+          ...(pollStatus?.nextRunAt
+            ? { nextRunAt: pollStatus.nextRunAt }
+            : {}),
+          ...(pollStatus?.lastError
+            ? { lastError: pollStatus.lastError }
+            : {}),
+        },
         version: options.version ?? '0.1.0',
       }),
     );
   });
   registerProjectRoutes(app, paths);
+  registerEventRoutes(app, events);
   const settings = new SettingsService(paths, config, (updated) => {
     config = updated;
     options.reviews?.configure(updated, env);
+    options.jobs?.configure(updated);
+    options.poller?.configure(updated);
   });
   registerSettingsRoutes(app, settings);
   if (options.reviews) {
+    options.reviews.database.setEventSink((event) => events.publish(event));
     const publisher =
       options.publisher ?? new PublishService(options.reviews.database, gh);
     const inbox =
       options.inbox ?? new InboxService(options.reviews.database, gh, paths);
     registerReviewRoutes(app, options.reviews, publisher);
     registerInboxRoutes(app, inbox);
+    registerActivityRoutes(app, options.reviews.database);
   }
+  if (options.poller) registerPollRoutes(app, options.poller);
   return app;
 }
 
@@ -105,8 +133,26 @@ if (isDirectRun) {
         paths,
         config,
       );
-      const app = createServer({ paths, config, gh, reviews });
-      app.addHook('onClose', () => database.close());
+      const events = new EventHub();
+      const jobs = new JobQueue(database, reviews, config);
+      reviews.setQueue(jobs);
+      const poller = new Poller(database, gh, reviews, paths, events, config);
+      const app = createServer({
+        paths,
+        config,
+        gh,
+        reviews,
+        events,
+        jobs,
+        poller,
+      });
+      await jobs.start();
+      poller.start();
+      app.addHook('onClose', async () => {
+        await poller.stop();
+        await jobs.stop();
+        database.close();
+      });
       return app.listen({ port: config.server.port, host: '127.0.0.1' });
     })
     .catch((error: unknown) => {

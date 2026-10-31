@@ -58,6 +58,10 @@ export class ReviewStateError extends Error {
 
 export class ReviewNotFoundError extends Error {}
 
+export interface ReviewQueue {
+  enqueue(reviewId: string): Promise<unknown>;
+}
+
 export function parsePullRequestUrl(value: string) {
   let url: URL;
   try {
@@ -79,6 +83,8 @@ export function parsePullRequestUrl(value: string) {
 }
 
 export class ReviewService {
+  private queue?: ReviewQueue;
+
   constructor(
     readonly database: ReviewDatabase,
     private readonly gh: GhClient,
@@ -92,6 +98,10 @@ export class ReviewService {
     this.provider = createReviewProvider(config, env);
   }
 
+  setQueue(queue: ReviewQueue) {
+    this.queue = queue;
+  }
+
   async create(prUrl: string, trigger: ReviewTrigger = 'manual') {
     const queued = await this.createQueued(prUrl, trigger);
     return this.run(queued.id);
@@ -99,9 +109,21 @@ export class ReviewService {
 
   async enqueue(prUrl: string, trigger: ReviewTrigger = 'manual') {
     const queued = await this.createQueued(prUrl, trigger);
-    setImmediate(() => {
-      void this.run(queued.id).catch(() => undefined);
-    });
+    if (this.queue) {
+      try {
+        await this.queue.enqueue(queued.id);
+      } catch (error) {
+        await this.database.updateReview(queued.id, {
+          status: 'failed',
+          error:
+            error instanceof Error ? error.message : 'Failed to enqueue review',
+        });
+        throw error;
+      }
+    } else
+      setImmediate(() => {
+        void this.run(queued.id).catch(() => undefined);
+      });
     return queued;
   }
 
@@ -115,6 +137,10 @@ export class ReviewService {
       throw new Error(`Rules for ${repo} are invalid`);
     if (!rulesDocument.parsed.enabled)
       throw new Error(`Rules for ${repo} are disabled`);
+    if (this.queue && this.database.hasActiveJobForPr(repo, number))
+      throw new ReviewStateError(
+        `A review job is already active for ${repo}#${number}`,
+      );
     const prId = await this.database.upsertPr(repo, pr);
     return this.database.createReview({
       prId,
@@ -172,9 +198,17 @@ export class ReviewService {
         for (const hunk of file.hunks) {
           for (const line of hunk.lines) {
             if (line.kind === 'add' && line.newLine !== undefined)
-              mockAnchors.push({ path: file.path, line: line.newLine, side: 'RIGHT' });
+              mockAnchors.push({
+                path: file.path,
+                line: line.newLine,
+                side: 'RIGHT',
+              });
             if (line.kind === 'del' && line.oldLine !== undefined)
-              mockAnchors.push({ path: file.path, line: line.oldLine, side: 'LEFT' });
+              mockAnchors.push({
+                path: file.path,
+                line: line.oldLine,
+                side: 'LEFT',
+              });
           }
         }
       }
@@ -220,7 +254,9 @@ export class ReviewService {
               ruleId: rule.id,
               kind: 'llm' as const,
               status: (reported?.status ?? 'unsure') as RuleResultStatus,
-              note: reported?.note ?? 'The model did not report a result for this rule.',
+              note:
+                reported?.note ??
+                'The model did not report a result for this rule.',
               severity: rule.severity,
             };
           }),
@@ -265,7 +301,10 @@ export class ReviewService {
     return this.database.listReviews(options);
   }
 
-  async edit(id: string, patch: { summary?: string; verdict?: ReviewDetail['verdict'] }) {
+  async edit(
+    id: string,
+    patch: { summary?: string; verdict?: ReviewDetail['verdict'] },
+  ) {
     const review = this.requireEditable(id);
     return this.database.updateReview(review.id, patch);
   }
