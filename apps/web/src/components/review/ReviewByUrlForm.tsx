@@ -1,3 +1,4 @@
+import { Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCreateReview } from '@/api/hooks';
@@ -28,12 +29,26 @@ export function ReviewByUrlForm() {
           aria-label="Pull request URL"
           placeholder="Review a PR by URL: https://github.com/owner/repo/pull/123"
           value={url}
+          disabled={create.isPending}
           onChange={(e) => setUrl(e.target.value)}
         />
         <Button type="submit" disabled={!valid || create.isPending}>
-          Review
+          {create.isPending ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Reviewing…
+            </>
+          ) : (
+            'Review'
+          )}
         </Button>
       </div>
+      {create.isPending ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          Fetching the PR and running the review. This can take a minute or two;
+          you will be taken to it when it finishes.
+        </p>
+      ) : null}
       {create.error ? (
         <p role="alert" className="text-sm text-destructive">
           {errorMessage(create.error)}

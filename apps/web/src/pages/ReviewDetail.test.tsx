@@ -206,6 +206,27 @@ describe('Review a PR by URL', () => {
     );
   });
 
+  it('shows progress while the review runs', async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.post('/api/reviews', async () => {
+        await new Promise((r) => setTimeout(r, 300));
+        return HttpResponse.json({ id: 'rev_new' });
+      }),
+    );
+    renderApp('/');
+    await user.type(
+      await screen.findByLabelText('Pull request URL'),
+      'https://github.com/acme/payments-api/pull/1',
+    );
+    await user.click(screen.getByRole('button', { name: 'Review' }));
+    expect(
+      await screen.findByRole('button', { name: 'Reviewing…' }),
+    ).toBeDisabled();
+    expect(screen.getByLabelText('Pull request URL')).toBeDisabled();
+    expect(screen.getByText(/can take a minute or two/)).toBeInTheDocument();
+  });
+
   it('shows the backend error', async () => {
     const user = userEvent.setup();
     server.use(
