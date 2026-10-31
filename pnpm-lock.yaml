@@ -44,6 +44,9 @@ importers:
       picomatch:
         specifier: ^4.0.2
         version: 4.0.7
+      pino:
+        specifier: ^10.4.0
+        version: 10.4.0
       sql.js:
         specifier: ^1.15.2
         version: 1.15.2

@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "pnpm --parallel --filter @pr-reviewer/server --filter @pr-reviewer/web dev",
     "build": "pnpm -r build",
-    "start": "pnpm --filter @pr-reviewer/server start",
+    "start": "pnpm build && pnpm --filter @pr-reviewer/server start",
     "test": "pnpm -r test",
     "lint": "eslint .",
     "typecheck": "pnpm --filter @pr-reviewer/shared build && pnpm -r typecheck",
