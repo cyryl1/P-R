@@ -1,5 +1,6 @@
 import { History, Inbox, Settings, FolderCog } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router-dom';
+import { useEvents } from '@/api/events';
 import { useInbox } from '@/api/hooks';
 import { Badge } from '@/components/ui/badge';
 import { ToastProvider } from '@/components/ui/toast';
@@ -15,6 +16,7 @@ const links = [
 ];
 
 export function AppShell() {
+  useEvents();
   const { data: inbox } = useInbox();
   const waiting =
     inbox?.filter(

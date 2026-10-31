@@ -2,6 +2,7 @@
 import type { z } from 'zod';
 import type {
   ApiSchemas,
+  ServerEvent,
   DiffFileSchema,
   ProjectSummarySchema,
   RulesDocumentSchema,
@@ -23,3 +24,8 @@ export type PublishResponse = z.infer<
   typeof ApiSchemas.reviews.publishResponse
 >;
 export type ActivityList = z.infer<typeof ApiSchemas.activity.response>;
+export type ActivityPage = {
+  pages: ActivityList[];
+  pageParams: unknown[];
+};
+export type PollStatus = Extract<ServerEvent, { type: 'poll.status' }>['data'];

@@ -1,9 +1,15 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { api } from './client';
 import type {
   AddCommentBody,
   EditCommentBody,
   EditReviewBody,
+  PollStatus,
   PublishBody,
   ReviewListQuery,
   SettingsUpdate,
@@ -19,6 +25,7 @@ export const keys = {
   review: (id: string) => ['review', id] as const,
   reviewDiff: (id: string) => ['review', id, 'diff'] as const,
   activity: ['activity'] as const,
+  pollStatus: ['poll-status'] as const,
 };
 
 export const useHealth = () =>
@@ -42,21 +49,51 @@ export const useReviews = (query: ReviewListQuery = {}) =>
   });
 const IN_PROGRESS = ['queued', 'gathering', 'reviewing', 'publishing'];
 
-/** Polls while a review is being generated; SSE replaces this in Phase 4. */
+/** SSE pushes updates; the slow poll is a safety net while a review is generating. */
 export const useReview = (id: string) =>
   useQuery({
     queryKey: keys.review(id),
     queryFn: () => api.review(id),
     refetchInterval: (query) =>
-      IN_PROGRESS.includes(query.state.data?.status ?? '') ? 2_000 : false,
+      IN_PROGRESS.includes(query.state.data?.status ?? '') ? 5_000 : false,
   });
 export const useReviewDiff = (id: string) =>
   useQuery({
     queryKey: keys.reviewDiff(id),
     queryFn: () => api.reviewDiff(id),
   });
+const PAGE_SIZE = 20;
+
+/** Cursor-paginated review history; `useReviews` stays for single-page callers. */
+export const useReviewHistory = (query: Omit<ReviewListQuery, 'cursor'>) =>
+  useInfiniteQuery({
+    queryKey: ['reviews', 'history', query] as const,
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) =>
+      api.reviews({
+        ...query,
+        limit: PAGE_SIZE,
+        ...(pageParam ? { cursor: pageParam } : {}),
+      }),
+    getNextPageParam: (last) => last.nextCursor,
+  });
+
 export const useActivity = () =>
-  useQuery({ queryKey: keys.activity, queryFn: () => api.activity() });
+  useInfiniteQuery({
+    queryKey: [...keys.activity, 'list'] as const,
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) =>
+      api.activity({ limit: 50, ...(pageParam ? { cursor: pageParam } : {}) }),
+    getNextPageParam: (last) => last.nextCursor,
+  });
+
+/** Latest `poll.status` pushed over SSE; undefined until the first event. */
+export const usePollStatus = () =>
+  useQuery<PollStatus | undefined>({
+    queryKey: keys.pollStatus,
+    queryFn: () => undefined,
+    enabled: false,
+  });
 
 export function usePollNow() {
   const qc = useQueryClient();
