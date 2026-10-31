@@ -459,7 +459,7 @@ interface ReviewProvider {
   4. User block C: deterministic results ("already reported, don't repeat").
   5. User block D: context files, each fenced with its path.
   6. User block E: the anchored diff from `renderForPrompt`.
-- **Token budget**: estimate tokens as characters / 4. If over `max_input_tokens`: drop ignored files, then lockfiles/generated/minified files, then truncate the largest files' hunks with a `[truncated N lines]` marker. Record what was cut in `llm_meta.truncation` and mention it in the summary. Chunked multi-call review is a v2 item.
+- **Token budget**: estimate tokens from character count. If over `max_input_tokens`, drop ignored and generated/lock files, then locally retrieve the most relevant diff hunks using the PR description, repository instructions and enabled LLM rules. Free OpenRouter models use a smaller estimated input/output cap for latency and reliability. Record the selected scope in `llm_meta.truncation` and mention it in the summary. Chunked multi-call review is a v2 item.
 
 ### 7.8 `review/` — the orchestrator
 
@@ -678,7 +678,7 @@ Six phases; only Phase 0 is sequential (Codex first, because the contract must e
 - [ ] `llm/`: provider interface, `MockProvider`, `OpenRouterProvider` with strict JSON Schema output, validation + one retry, token budgeting.
 - [ ] `prompt.ts` with snapshot tests.
 - [ ] `review/` orchestrator with post-processing; `db/` schema and migrations.
-- [ ] Endpoints: `POST /reviews` (runs inline for now), `GET /reviews`, `GET /reviews/:id`, `GET /reviews/:id/diff`, `PATCH`, comment CRUD, `rerun`, `dismiss`.
+- [ ] Endpoints: `POST /reviews` (returns the queued review and starts an in-process background run), `GET /reviews`, `GET /reviews/:id`, `GET /reviews/:id/diff`, `PATCH`, comment CRUD, `rerun`, `dismiss`.
 - [ ] CLI without `--dry-run` saves the review; `--provider mock` works with no API key.
 
 **Claude Code**
@@ -706,7 +706,7 @@ Six phases; only Phase 0 is sequential (Codex first, because the contract must e
 
 **Codex**
 
-- [ ] Persistent job queue with concurrency, retries, backoff, one-job-per-PR lock, restart recovery. `POST /reviews` now enqueues instead of running inline.
+- [ ] Persistent job queue with concurrency, retries, backoff, one-job-per-PR lock, restart recovery. Replace Phase 2's in-process background run with durable enqueueing.
 - [ ] Poller with trigger decisions, stale marking, submitted detection; `POST /poll`.
 - [ ] SSE hub and all four events; `GET /activity`.
 

@@ -5,6 +5,8 @@ import type { ContextFile } from '../context/index.js';
 import { renderForPrompt, type DiffFile } from '../diff/index.js';
 import type { GhPr } from '../gh/client.js';
 
+type DiffHunk = DiffFile['hunks'][number];
+
 export type PromptInput = {
   pr: GhPr;
   rules: RulesFile;
@@ -29,6 +31,166 @@ const generatedPattern = [
   '**/build/**',
   '**/*.min.*',
 ];
+const sourcePattern = /\.(?:[cm]?[jt]sx?|py|rb|go|rs|java|kt|cs|php|swift|sql|graphql|ya?ml)$/i;
+const stopWords = new Set([
+  'about',
+  'after',
+  'before',
+  'change',
+  'changes',
+  'check',
+  'code',
+  'from',
+  'into',
+  'review',
+  'that',
+  'this',
+  'with',
+]);
+
+function retrievalTerms(input: PromptInput): string[] {
+  const llmRuleText = input.rules.rules
+    .filter((rule): rule is Extract<Rule, { type: 'llm' }> => rule.type === 'llm')
+    .map((rule) => `${rule.description} ${rule.paths?.join(' ') ?? ''}`)
+    .join(' ');
+  const text = [
+    input.pr.title,
+    input.pr.body,
+    input.rules.review.instructions,
+    llmRuleText,
+  ]
+    .join(' ')
+    .toLowerCase();
+  return [
+    ...new Set(
+      text
+        .split(/[^a-z0-9_./-]+/)
+        .map((term) => term.trim())
+        .filter(
+          (term) =>
+            term.length >= 4 && !stopWords.has(term) && !/^\d+$/.test(term),
+        ),
+    ),
+  ].slice(0, 60);
+}
+
+function hunkScore(
+  input: PromptInput,
+  file: DiffFile,
+  hunk: DiffHunk,
+  terms: string[],
+): number {
+  const path = file.path.toLowerCase();
+  const changedText = hunk.lines
+    .filter((line) => line.kind !== 'context')
+    .map((line) => line.text)
+    .join('\n')
+    .toLowerCase()
+    .slice(0, 50_000);
+  let score = sourcePattern.test(file.path) ? 20 : 0;
+  score += Math.min(
+    30,
+    hunk.lines.filter((line) => line.kind !== 'context').length,
+  );
+  for (const rule of input.rules.rules) {
+    if (
+      rule.enabled !== false &&
+      rule.type === 'llm' &&
+      rule.paths?.some((pattern) => picomatch.isMatch(file.path, pattern))
+    ) {
+      score += 100 + severityRank[rule.severity] * 20;
+    }
+  }
+  for (const term of terms) {
+    if (path.includes(term)) score += 25;
+    if (changedText.includes(term)) score += 5;
+  }
+  return score;
+}
+
+function compactHunk(hunk: DiffHunk, maximumCharacters: number): DiffHunk {
+  if (maximumCharacters <= 0) return { ...hunk, lines: [] };
+  const wanted = new Set<number>();
+  hunk.lines.forEach((line, index) => {
+    if (line.kind === 'context') return;
+    for (let nearby = Math.max(0, index - 2); nearby <= Math.min(hunk.lines.length - 1, index + 2); nearby += 1)
+      wanted.add(nearby);
+  });
+  let used = hunk.header.length;
+  const selected = [...wanted]
+    .sort((left, right) => left - right)
+    .filter((index) => {
+      const length = hunk.lines[index]!.text.length + 16;
+      if (used + length > maximumCharacters) return false;
+      used += length;
+      return true;
+    })
+    .map((index) => hunk.lines[index]!);
+  return {
+    header: `${hunk.header} [retrieved ${selected.length}/${hunk.lines.length} lines]`,
+    lines: selected,
+  };
+}
+
+function retrieveRelevantDiff(
+  input: PromptInput,
+  files: DiffFile[],
+  characterBudget: number,
+): { files: DiffFile[]; selectedHunks: number; totalHunks: number } {
+  const terms = retrievalTerms(input);
+  const candidates = files.flatMap((file, fileIndex) =>
+    file.hunks.map((hunk, hunkIndex) => ({
+      file,
+      hunk,
+      fileIndex,
+      hunkIndex,
+      score: hunkScore(input, file, hunk, terms),
+      length: renderForPrompt([{ ...file, hunks: [hunk] }]).length,
+    })),
+  );
+  candidates.sort(
+    (left, right) =>
+      right.score - left.score ||
+      left.fileIndex - right.fileIndex ||
+      left.hunkIndex - right.hunkIndex,
+  );
+
+  let remaining = characterBudget;
+  const selected: typeof candidates = [];
+  for (const candidate of candidates) {
+    if (candidate.length <= remaining) {
+      selected.push(candidate);
+      remaining -= candidate.length;
+    }
+  }
+  if (selected.length === 0 && candidates.length > 0) {
+    const candidate = candidates[0]!;
+    const compacted = compactHunk(candidate.hunk, Math.max(500, characterBudget));
+    selected.push({
+      ...candidate,
+      hunk: compacted,
+      length: renderForPrompt([{ ...candidate.file, hunks: [compacted] }]).length,
+    });
+  }
+
+  selected.sort(
+    (left, right) =>
+      left.fileIndex - right.fileIndex || left.hunkIndex - right.hunkIndex,
+  );
+  const byFile = new Map<DiffFile, DiffHunk[]>();
+  for (const candidate of selected) {
+    const hunks = byFile.get(candidate.file) ?? [];
+    hunks.push(candidate.hunk);
+    byFile.set(candidate.file, hunks);
+  }
+  return {
+    files: files
+      .filter((file) => byFile.has(file))
+      .map((file) => ({ ...file, hunks: byFile.get(file)! })),
+    selectedHunks: selected.length,
+    totalHunks: candidates.length,
+  };
+}
 
 const promptText = (
   input: Omit<PromptInput, 'maxInputTokens' | 'files'> & { files: DiffFile[] },
@@ -94,14 +256,18 @@ export function buildReviewPrompt(input: PromptInput): BuiltPrompt {
     }
   }
 
-  while (prompt.length > characterLimit && files.length > 0) {
-    const largest = [...files].sort(
-      (left, right) =>
-        renderForPrompt([right]).length - renderForPrompt([left]).length,
-    )[0]!;
-    const lines = largest.hunks.flatMap((hunk) => hunk.lines).length;
-    files = files.filter((file) => file !== largest);
-    truncation.push(`Dropped ${largest.path} (${lines} diff lines) for token budget`);
+  if (prompt.length > characterLimit && files.length > 0) {
+    const baseLength = promptText({ ...input, files: [] }).length;
+    const originalFiles = files.length;
+    const retrieved = retrieveRelevantDiff(
+      input,
+      files,
+      Math.max(1_000, characterLimit - baseLength - 500),
+    );
+    files = retrieved.files;
+    truncation.push(
+      `Retrieved ${retrieved.selectedHunks}/${retrieved.totalHunks} relevant diff hunks across ${files.length}/${originalFiles} files`,
+    );
     prompt = promptText({ ...input, files });
   }
 

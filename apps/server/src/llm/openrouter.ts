@@ -19,9 +19,20 @@ type Fetch = typeof globalThis.fetch;
 type OpenRouterResponse = {
   model?: string;
   choices?: Array<{
-    message?: { content?: string | null; refusal?: string | null };
+    finish_reason?: string | null;
+    native_finish_reason?: string | null;
+    message?: {
+      content?: string | null;
+      refusal?: string | null;
+      reasoning?: string | null;
+    };
   }>;
-  usage?: { prompt_tokens?: number; completion_tokens?: number };
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+    completion_tokens_details?: { reasoning_tokens?: number };
+  };
   error?: { message?: string };
 };
 
@@ -89,8 +100,33 @@ export class OpenRouterProvider implements ReviewProvider {
       const refusal = response.body.choices?.[0]?.message?.refusal;
       if (refusal)
         throw new LlmProviderError(`OpenRouter refused the review: ${refusal}`);
-      if (!content)
-        throw new LlmProviderError('OpenRouter returned no review content');
+      if (!content) {
+        const choice = response.body.choices?.[0];
+        const usage = response.body.usage;
+        const diagnostics = [
+          choice?.finish_reason
+            ? `finish=${choice.finish_reason}`
+            : undefined,
+          choice?.native_finish_reason
+            ? `nativeFinish=${choice.native_finish_reason}`
+            : undefined,
+          usage?.prompt_tokens !== undefined
+            ? `inputTokens=${usage.prompt_tokens}`
+            : undefined,
+          usage?.completion_tokens !== undefined
+            ? `outputTokens=${usage.completion_tokens}`
+            : undefined,
+          usage?.completion_tokens_details?.reasoning_tokens !== undefined
+            ? `reasoningTokens=${usage.completion_tokens_details.reasoning_tokens}`
+            : undefined,
+          choice?.message?.reasoning
+            ? `reasoningChars=${choice.message.reasoning.length}`
+            : undefined,
+        ].filter(Boolean);
+        throw new LlmProviderError(
+          `OpenRouter returned no review content${diagnostics.length ? ` (${diagnostics.join(', ')})` : ''}`,
+        );
+      }
 
       try {
         const output = parseOutput(content);
@@ -146,6 +182,7 @@ export class OpenRouterProvider implements ReviewProvider {
           messages,
           max_tokens: input.maxOutputTokens ?? this.maxOutputTokens,
           temperature: 0,
+          reasoning: { enabled: false, exclude: true },
           response_format: {
             type: 'json_schema',
             json_schema: {

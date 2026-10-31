@@ -140,6 +140,24 @@ export class ReviewDatabase {
     this.database.close();
   }
 
+  async recoverInterruptedReviews(): Promise<number> {
+    const now = new Date().toISOString();
+    this.database.run(
+      `UPDATE reviews
+       SET status='failed',
+           error=CASE
+             WHEN status='publishing' THEN 'Server restarted while publishing; verify GitHub before retrying.'
+             ELSE 'Server restarted before the review completed. Re-run the review.'
+           END,
+           updated_at=?
+       WHERE status IN ('gathering', 'reviewing', 'publishing')`,
+      [now],
+    );
+    const recovered = this.database.getRowsModified();
+    if (recovered > 0) await this.persist();
+    return recovered;
+  }
+
   private all(sql: string, parameters: SqlValue[] = []): Row[] {
     const statement = this.database.prepare(sql);
     try {

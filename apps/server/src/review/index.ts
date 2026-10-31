@@ -31,6 +31,25 @@ const severityRank: Record<Severity, number> = {
   major: 2,
   blocker: 3,
 };
+const FREE_MODEL_INPUT_TOKENS = 24_000;
+const FREE_MODEL_OUTPUT_TOKENS = 4_000;
+
+export function reviewTokenBudgets(
+  config: AppConfig,
+  provider: Pick<ReviewProvider, 'name' | 'model'>,
+) {
+  const isFreeOpenRouterModel =
+    provider.name === 'openrouter' && provider.model.endsWith(':free');
+  return {
+    inputTokens: isFreeOpenRouterModel
+      ? Math.min(config.llm.max_input_tokens, FREE_MODEL_INPUT_TOKENS)
+      : config.llm.max_input_tokens,
+    outputTokens: isFreeOpenRouterModel
+      ? Math.min(config.llm.max_output_tokens, FREE_MODEL_OUTPUT_TOKENS)
+      : config.llm.max_output_tokens,
+    cappedForFreeModel: isFreeOpenRouterModel,
+  };
+}
 
 export class ReviewStateError extends Error {
   readonly code = 'INVALID_STATE';
@@ -68,6 +87,19 @@ export class ReviewService {
   ) {}
 
   async create(prUrl: string, trigger: ReviewTrigger = 'manual') {
+    const queued = await this.createQueued(prUrl, trigger);
+    return this.run(queued.id);
+  }
+
+  async enqueue(prUrl: string, trigger: ReviewTrigger = 'manual') {
+    const queued = await this.createQueued(prUrl, trigger);
+    setImmediate(() => {
+      void this.run(queued.id).catch(() => undefined);
+    });
+    return queued;
+  }
+
+  private async createQueued(prUrl: string, trigger: ReviewTrigger) {
     const { repo, number } = parsePullRequestUrl(prUrl);
     const [pr, rulesDocument] = await Promise.all([
       this.gh.getPr(repo, number),
@@ -78,13 +110,12 @@ export class ReviewService {
     if (!rulesDocument.parsed.enabled)
       throw new Error(`Rules for ${repo} are disabled`);
     const prId = await this.database.upsertPr(repo, pr);
-    const queued = await this.database.createReview({
+    return this.database.createReview({
       prId,
       headSha: pr.headRefOid,
       trigger,
       rules: rulesDocument.parsed,
     });
-    return this.run(queued.id);
   }
 
   async run(reviewId: string): Promise<ReviewSummary> {
@@ -110,14 +141,22 @@ export class ReviewService {
         files: context.files,
         rules: context.rulesForRepo,
       });
+      const budgets = reviewTokenBudgets(this.config, this.provider);
       const built = buildReviewPrompt({
         pr: context.pr,
         rules: context.rulesForRepo,
         files: context.promptFiles,
         contextFiles: context.contextFiles,
         deterministicResults,
-        maxInputTokens: this.config.llm.max_input_tokens,
+        maxInputTokens: budgets.inputTokens,
       });
+      if (
+        budgets.cappedForFreeModel &&
+        this.config.llm.max_input_tokens > budgets.inputTokens
+      )
+        built.truncation.unshift(
+          `Capped free-model input at an estimated ${budgets.inputTokens} tokens for latency and reliability`,
+        );
       const mockAnchors: Array<{
         path: string;
         line: number;
@@ -136,7 +175,7 @@ export class ReviewService {
       const providerResult = await this.provider.review({
         system: built.system,
         prompt: built.prompt,
-        maxOutputTokens: this.config.llm.max_output_tokens,
+        maxOutputTokens: budgets.outputTokens,
         mockAnchors,
       });
       const minimum = severityRank[context.rulesForRepo.review.min_severity];
@@ -262,7 +301,7 @@ export class ReviewService {
     const review = this.requireReview(id);
     if (!rerunnableStatuses.has(review.status))
       throw new ReviewStateError(`Cannot rerun a ${review.status} review`);
-    return this.create(review.pr.url, 'rerun');
+    return this.enqueue(review.pr.url, 'rerun');
   }
 
   async dismiss(id: string) {
