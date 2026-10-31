@@ -15,6 +15,7 @@ import { ReviewDatabase } from '../db/index.js';
 import { commentableSet, isValidAnchor, type DiffFile } from '../diff/index.js';
 import type { GhClient } from '../gh/client.js';
 import type { ReviewProvider } from '../llm/provider.js';
+import { createReviewProvider } from '../llm/index.js';
 import { buildReviewPrompt } from '../llm/prompt.js';
 import { getRules } from '../rules/index.js';
 
@@ -81,10 +82,15 @@ export class ReviewService {
   constructor(
     readonly database: ReviewDatabase,
     private readonly gh: GhClient,
-    private readonly provider: ReviewProvider,
+    private provider: ReviewProvider,
     private readonly paths: DataPaths,
-    private readonly config: AppConfig,
+    private config: AppConfig,
   ) {}
+
+  configure(config: AppConfig, env: NodeJS.ProcessEnv = process.env) {
+    this.config = config;
+    this.provider = createReviewProvider(config, env);
+  }
 
   async create(prUrl: string, trigger: ReviewTrigger = 'manual') {
     const queued = await this.createQueued(prUrl, trigger);
