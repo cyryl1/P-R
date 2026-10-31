@@ -156,14 +156,15 @@ describe('review orchestration', () => {
     });
   });
 
-  it('marks interrupted reviews failed during startup recovery', async () => {
+  it('marks interrupted publishing failed during startup recovery', async () => {
     const { database, service } = await fixture();
     const completed = await service.create(pr.url);
-    await database.updateReview(completed.id, { status: 'reviewing' });
+    await database.updateReview(completed.id, { status: 'publishing' });
     await expect(database.recoverInterruptedReviews()).resolves.toBe(1);
     expect(database.getReview(completed.id)).toMatchObject({
       status: 'failed',
-      error: 'Server restarted before the review completed. Re-run the review.',
+      error:
+        'Server restarted while publishing; verify GitHub before retrying.',
     });
   });
 

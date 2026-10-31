@@ -15,6 +15,7 @@ import {
   type ReviewSummary,
   type ReviewTrigger,
   type RulesFile,
+  type ServerEvent,
   type Severity,
   type Verdict,
 } from '@pr-reviewer/shared';
@@ -49,6 +50,15 @@ export type InboxPr = {
   headSha: string;
   isDraft: boolean;
   updatedAt: string;
+};
+export type ReviewJob = {
+  id: string;
+  reviewId: string;
+  prId: number;
+  status: 'queued' | 'running' | 'retry_wait' | 'done' | 'failed';
+  attempts: number;
+  availableAt: string;
+  lastError?: string;
 };
 
 const migrations = `
@@ -115,7 +125,21 @@ CREATE TABLE IF NOT EXISTS activity (
   review_id TEXT,
   pr_id INTEGER
 );
-PRAGMA user_version = 1;
+CREATE TABLE IF NOT EXISTS jobs (
+  id TEXT PRIMARY KEY,
+  review_id TEXT NOT NULL UNIQUE REFERENCES reviews(id) ON DELETE CASCADE,
+  pr_id INTEGER NOT NULL REFERENCES prs(id),
+  status TEXT NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  available_at TEXT NOT NULL,
+  last_error TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS jobs_status_available ON jobs(status, available_at);
+CREATE UNIQUE INDEX IF NOT EXISTS jobs_active_pr ON jobs(pr_id)
+  WHERE status IN ('queued', 'running', 'retry_wait');
+PRAGMA user_version = 2;
 `;
 
 function asString(value: SqlValue | undefined): string {
@@ -129,6 +153,9 @@ function optionalString(value: SqlValue | undefined): string | undefined {
 }
 
 export class ReviewDatabase {
+  private eventSink: ((event: ServerEvent) => void) | undefined;
+  private persistence: Promise<void> = Promise.resolve();
+
   private constructor(
     private readonly database: Database,
     private readonly path: string,
@@ -154,17 +181,18 @@ export class ReviewDatabase {
     this.database.close();
   }
 
+  setEventSink(sink: ((event: ServerEvent) => void) | undefined) {
+    this.eventSink = sink;
+  }
+
   async recoverInterruptedReviews(): Promise<number> {
     const now = new Date().toISOString();
     this.database.run(
       `UPDATE reviews
        SET status='failed',
-           error=CASE
-             WHEN status='publishing' THEN 'Server restarted while publishing; verify GitHub before retrying.'
-             ELSE 'Server restarted before the review completed. Re-run the review.'
-           END,
+           error='Server restarted while publishing; verify GitHub before retrying.',
            updated_at=?
-       WHERE status IN ('gathering', 'reviewing', 'publishing')`,
+       WHERE status='publishing'`,
       [now],
     );
     const recovered = this.database.getRowsModified();
@@ -190,10 +218,17 @@ export class ReviewDatabase {
 
   private async persist() {
     if (this.path === ':memory:') return;
-    await mkdir(dirname(this.path), { recursive: true });
-    const temporary = `${this.path}.tmp`;
-    await writeFile(temporary, this.database.export(), { mode: 0o600 });
-    await rename(temporary, this.path);
+    const bytes = this.database.export();
+    const operation = this.persistence
+      .catch(() => undefined)
+      .then(async () => {
+        await mkdir(dirname(this.path), { recursive: true });
+        const temporary = `${this.path}.tmp`;
+        await writeFile(temporary, bytes, { mode: 0o600 });
+        await rename(temporary, this.path);
+      });
+    this.persistence = operation;
+    await operation;
   }
 
   async upsertPr(
@@ -269,7 +304,9 @@ export class ReviewDatabase {
       ],
     );
     await this.persist();
-    return this.getSummary(id)!;
+    const summary = this.getSummary(id)!;
+    this.eventSink?.({ type: 'review.updated', data: summary });
+    return summary;
   }
 
   async updateReview(id: string, patch: ReviewPatch): Promise<ReviewDetail> {
@@ -302,7 +339,10 @@ export class ReviewDatabase {
     if (this.database.getRowsModified() === 0)
       throw new Error('Review not found');
     await this.persist();
-    return this.getReview(id)!;
+    const review = this.getReview(id)!;
+    if (patch.status !== undefined)
+      this.eventSink?.({ type: 'review.updated', data: review });
+    return review;
   }
 
   async replaceComments(reviewId: string, comments: NewComment[]) {
@@ -505,6 +545,13 @@ export class ReviewDatabase {
     }));
   }
 
+  async clearReviewRequests(): Promise<void> {
+    this.database.run(
+      'UPDATE prs SET review_requested=0 WHERE review_requested=1',
+    );
+    if (this.database.getRowsModified() > 0) await this.persist();
+  }
+
   getLatestReviewForPr(
     repo: string,
     number: number,
@@ -514,6 +561,163 @@ export class ReviewDatabase {
       [repo, number],
     )[0];
     return row ? this.toSummary(row) : undefined;
+  }
+
+  getReviewForHead(
+    repo: string,
+    number: number,
+    headSha: string,
+  ): ReviewSummary | undefined {
+    const row = this.reviewRows(
+      `WHERE p.repo=? AND p.number=? AND r.head_sha=?
+       ORDER BY r.created_at DESC LIMIT 1`,
+      [repo, number, headSha],
+    )[0];
+    return row ? this.toSummary(row) : undefined;
+  }
+
+  hasActiveJobForPr(repo: string, number: number): boolean {
+    return Boolean(
+      this.one(
+        `SELECT j.id FROM jobs j JOIN prs p ON p.id=j.pr_id
+         WHERE p.repo=? AND p.number=?
+           AND j.status IN ('queued', 'running', 'retry_wait') LIMIT 1`,
+        [repo, number],
+      ),
+    );
+  }
+
+  async enqueueJob(reviewId: string): Promise<ReviewJob> {
+    const review = this.one('SELECT pr_id FROM reviews WHERE id=?', [reviewId]);
+    if (!review) throw new Error('Review not found');
+    const existing = this.one('SELECT * FROM jobs WHERE review_id=?', [
+      reviewId,
+    ]);
+    if (existing) return this.toJob(existing);
+    const id = ulid();
+    const now = new Date().toISOString();
+    try {
+      this.database.run(
+        `INSERT INTO jobs
+         (id, review_id, pr_id, status, attempts, available_at, created_at, updated_at)
+         VALUES (?, ?, ?, 'queued', 0, ?, ?, ?)`,
+        [id, reviewId, review.pr_id!, now, now, now],
+      );
+    } catch (error) {
+      if (/UNIQUE constraint failed: jobs\.pr_id/i.test(String(error)))
+        throw new Error('A review job is already active for this pull request');
+      throw error;
+    }
+    await this.persist();
+    return this.toJob(this.one('SELECT * FROM jobs WHERE id=?', [id])!);
+  }
+
+  async recoverJobs(): Promise<number> {
+    const now = new Date().toISOString();
+    this.database.run(
+      `UPDATE jobs SET status='queued', available_at=?, updated_at=?
+       WHERE status='running'`,
+      [now, now],
+    );
+    const recovered = this.database.getRowsModified();
+    this.database.run(
+      `UPDATE reviews SET status='queued', error=NULL, updated_at=?
+       WHERE status IN ('gathering', 'reviewing')
+         AND id IN (SELECT review_id FROM jobs WHERE status='queued')`,
+      [now],
+    );
+    const recoveredReviews = this.database.getRowsModified();
+    this.database.run(
+      `INSERT OR IGNORE INTO jobs
+       (id, review_id, pr_id, status, attempts, available_at, created_at, updated_at)
+       SELECT lower(hex(randomblob(16))), r.id, r.pr_id, 'queued', 0, ?, ?, ?
+       FROM reviews r LEFT JOIN jobs j ON j.review_id=r.id
+       WHERE r.status='queued' AND j.id IS NULL`,
+      [now, now, now],
+    );
+    const inserted = this.database.getRowsModified();
+    if (recovered > 0 || recoveredReviews > 0 || inserted > 0)
+      await this.persist();
+    return recovered;
+  }
+
+  getJobForReview(reviewId: string): ReviewJob | undefined {
+    const row = this.one('SELECT * FROM jobs WHERE review_id=?', [reviewId]);
+    return row ? this.toJob(row) : undefined;
+  }
+
+  async claimNextJob(now = new Date()): Promise<ReviewJob | undefined> {
+    const row = this.one(
+      `SELECT * FROM jobs
+       WHERE status IN ('queued', 'retry_wait') AND available_at<=?
+       ORDER BY available_at, created_at LIMIT 1`,
+      [now.toISOString()],
+    );
+    if (!row) return undefined;
+    const id = asString(row.id);
+    this.database.run(
+      `UPDATE jobs SET status='running', attempts=attempts+1, updated_at=?
+       WHERE id=? AND status IN ('queued', 'retry_wait')`,
+      [now.toISOString(), id],
+    );
+    if (this.database.getRowsModified() === 0) return undefined;
+    await this.persist();
+    return this.toJob(this.one('SELECT * FROM jobs WHERE id=?', [id])!);
+  }
+
+  async completeJob(id: string): Promise<void> {
+    await this.updateJob(id, 'done');
+  }
+
+  async failJob(id: string, error: string): Promise<void> {
+    await this.updateJob(id, 'failed', { error });
+  }
+
+  async retryJob(id: string, error: string, availableAt: Date): Promise<void> {
+    await this.updateJob(id, 'retry_wait', { error, availableAt });
+  }
+
+  nextJobAvailableAt(): string | undefined {
+    const row = this.one(
+      `SELECT MIN(available_at) available_at FROM jobs
+       WHERE status IN ('queued', 'retry_wait')`,
+    );
+    return optionalString(row?.available_at);
+  }
+
+  listActivities(options: { limit?: number; cursor?: string } = {}): {
+    items: ActivityEntry[];
+    nextCursor?: string;
+  } {
+    const parameters: SqlValue[] = [];
+    const where = options.cursor ? 'WHERE id < ?' : '';
+    if (options.cursor) parameters.push(options.cursor);
+    const limit = options.limit ?? 30;
+    parameters.push(limit + 1);
+    const rows = this.all(
+      `SELECT * FROM activity ${where} ORDER BY id DESC LIMIT ?`,
+      parameters,
+    );
+    const hasMore = rows.length > limit;
+    const selected = rows.slice(0, limit);
+    return {
+      items: selected.map((row) =>
+        ActivityEntrySchema.parse({
+          id: asString(row.id),
+          ts: asString(row.ts),
+          level: asString(row.level),
+          type: asString(row.type),
+          message: asString(row.message),
+          ...(optionalString(row.review_id)
+            ? { reviewId: optionalString(row.review_id)! }
+            : {}),
+          ...(row.pr_id === null || row.pr_id === undefined
+            ? {}
+            : { prId: Number(row.pr_id) }),
+        }),
+      ),
+      ...(hasMore ? { nextCursor: asString(selected.at(-1)!.id) } : {}),
+    };
   }
 
   async addActivity(
@@ -538,7 +742,42 @@ export class ReviewDatabase {
       ],
     );
     await this.persist();
+    this.eventSink?.({ type: 'activity.created', data: entry });
     return entry;
+  }
+
+  private async updateJob(
+    id: string,
+    status: ReviewJob['status'],
+    options: { error?: string; availableAt?: Date } = {},
+  ) {
+    const now = new Date().toISOString();
+    this.database.run(
+      `UPDATE jobs SET status=?, last_error=?, available_at=?, updated_at=? WHERE id=?`,
+      [
+        status,
+        options.error ?? null,
+        options.availableAt?.toISOString() ?? now,
+        now,
+        id,
+      ],
+    );
+    if (this.database.getRowsModified() === 0) throw new Error('Job not found');
+    await this.persist();
+  }
+
+  private toJob(row: Row): ReviewJob {
+    return {
+      id: asString(row.id),
+      reviewId: asString(row.review_id),
+      prId: Number(row.pr_id),
+      status: asString(row.status) as ReviewJob['status'],
+      attempts: Number(row.attempts),
+      availableAt: asString(row.available_at),
+      ...(optionalString(row.last_error)
+        ? { lastError: optionalString(row.last_error)! }
+        : {}),
+    };
   }
 
   private reviewRows(suffix: string, parameters: SqlValue[]): Row[] {
