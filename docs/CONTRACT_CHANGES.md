@@ -20,3 +20,7 @@ Add `ignored: z.boolean().optional()` to `DiffFileSchema`, true when the path ma
 
 1. Replaced the `anthropic` provider enum value with `openrouter` in `AppConfig` and the health response. The default is now `{provider: openrouter, model: openrouter/free}`.
 2. Changed the LLM wire schema so optional comment fields are required nullable values. This makes `ReviewOutput` compatible with strict JSON Schema providers; Zod normalizes `null` back to omitted application fields.
+
+### Explicit OpenRouter free model — 2026-10-31
+
+1. Changed the default OpenRouter model from the dynamic `openrouter/free` router to `nvidia/nemotron-3.5-super-vl:free`, which advertises strict structured-output support. Existing configs using the former default are migrated on startup; explicitly configured models remain unchanged.

@@ -1,4 +1,5 @@
 import {
+  DEFAULT_OPENROUTER_MODEL,
   ReviewOutputJsonSchema,
   ReviewOutputSchema,
   type ReviewOutput,
@@ -68,7 +69,7 @@ export class OpenRouterProvider implements ReviewProvider {
 
   constructor(options: OpenRouterProviderOptions = {}) {
     this.apiKey = options.apiKey;
-    this.model = options.model ?? 'openrouter/free';
+    this.model = options.model ?? DEFAULT_OPENROUTER_MODEL;
     this.maxOutputTokens = options.maxOutputTokens ?? 8000;
     this.fetch = options.fetch ?? globalThis.fetch;
     this.appUrl = options.appUrl;

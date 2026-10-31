@@ -37,9 +37,9 @@ describe('application configuration', () => {
 
   it('validates settings and determines API key presence without returning the key', () => {
     const config = validateConfigYaml(
-      'llm:\n  provider: openrouter\n  model: openrouter/free\n',
+      'llm:\n  provider: openrouter\n  model: nvidia/nemotron-3.5-super-vl:free\n',
     );
-    expect(config.llm.model).toBe('openrouter/free');
+    expect(config.llm.model).toBe('nvidia/nemotron-3.5-super-vl:free');
     expect(isLlmConfigured(config, { OPENROUTER_API_KEY: 'secret' })).toBe(
       true,
     );
@@ -60,8 +60,16 @@ describe('application configuration', () => {
 `);
     expect(config.llm).toMatchObject({
       provider: 'openrouter',
-      model: 'openrouter/free',
+      model: 'nvidia/nemotron-3.5-super-vl:free',
       max_input_tokens: 100000,
     });
+  });
+
+  it('migrates the former OpenRouter router default to Nemotron', () => {
+    const config = validateConfigYaml(`llm:
+  provider: openrouter
+  model: openrouter/free
+`);
+    expect(config.llm.model).toBe('nvidia/nemotron-3.5-super-vl:free');
   });
 });

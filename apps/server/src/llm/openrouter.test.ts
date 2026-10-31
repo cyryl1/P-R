@@ -183,7 +183,7 @@ describe('createReviewProvider', () => {
     });
     expect(provider).toMatchObject({
       name: 'openrouter',
-      model: 'openrouter/free',
+      model: 'nvidia/nemotron-3.5-super-vl:free',
     });
   });
 

@@ -5,7 +5,11 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config as loadDotEnv } from 'dotenv';
 import { parse, stringify } from 'yaml';
-import { AppConfigSchema, type AppConfig } from '@pr-reviewer/shared';
+import {
+  AppConfigSchema,
+  DEFAULT_OPENROUTER_MODEL,
+  type AppConfig,
+} from '@pr-reviewer/shared';
 
 export type DataPaths = {
   home: string;
@@ -89,10 +93,17 @@ function parseConfigYaml(text: string): {
           typeof legacy.model !== 'string' ||
           legacy.model.startsWith('claude-')
         ) {
-          legacy.model = 'openrouter/free';
+          legacy.model = DEFAULT_OPENROUTER_MODEL;
         }
         if (legacy.max_input_tokens === 120000)
           legacy.max_input_tokens = 100000;
+        migrated = true;
+      }
+      if (
+        legacy.provider === 'openrouter' &&
+        legacy.model === 'openrouter/free'
+      ) {
+        legacy.model = DEFAULT_OPENROUTER_MODEL;
         migrated = true;
       }
     }
