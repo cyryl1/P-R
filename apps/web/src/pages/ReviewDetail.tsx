@@ -77,19 +77,6 @@ export function ReviewDetail() {
       {!editable ? (
         <p className="text-sm text-muted-foreground">
           This review is read-only.
-          {data.github ? (
-            <>
-              {' '}
-              <a
-                className="underline"
-                href={data.github.url}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Open on GitHub
-              </a>
-            </>
-          ) : null}
         </p>
       ) : null}
       <div className="flex gap-6">
