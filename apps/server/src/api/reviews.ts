@@ -60,7 +60,7 @@ export function registerReviewRoutes(app: FastifyInstance, reviews: ReviewServic
       return reply.code(400).send(apiError('VALIDATION_ERROR', 'Invalid PR URL'));
     try {
       return reply.send(
-        ApiSchemas.reviews.summary.parse(await reviews.create(body.data.prUrl)),
+        ApiSchemas.reviews.summary.parse(await reviews.enqueue(body.data.prUrl)),
       );
     } catch (error) {
       return sendError(reply, error);

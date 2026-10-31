@@ -54,4 +54,43 @@ describe('review prompt', () => {
     expect(built.truncation.length).toBeGreaterThan(0);
     expect(built.prompt.length).toBeLessThanOrEqual(320);
   });
+
+  it('retrieves rule-relevant hunks before unrelated large changes', () => {
+    const relevantRules = RulesFileSchema.parse({
+      ...rules,
+      rules: [
+        {
+          id: 'auth',
+          type: 'llm',
+          description: 'Authorization middleware must enforce permissions.',
+          paths: ['src/auth/**'],
+          severity: 'blocker',
+        },
+      ],
+    });
+    const files = parseDiff(`diff --git a/docs/history.md b/docs/history.md
+--- a/docs/history.md
++++ b/docs/history.md
+@@ -0,0 +1,2 @@
++${'unrelated '.repeat(300)}
++${'archive '.repeat(300)}
+diff --git a/src/auth/permissions.ts b/src/auth/permissions.ts
+--- a/src/auth/permissions.ts
++++ b/src/auth/permissions.ts
+@@ -1 +1,2 @@
+ export const allowed = true;
++export const enforcePermission = () => allowed;
+`);
+    const built = buildReviewPrompt({
+      pr,
+      rules: relevantRules,
+      files,
+      contextFiles: [],
+      deterministicResults: [],
+      maxInputTokens: 500,
+    });
+    expect(built.prompt).toContain('src/auth/permissions.ts');
+    expect(built.prompt).not.toContain('docs/history.md');
+    expect(built.truncation.join(' ')).toContain('Retrieved');
+  });
 });

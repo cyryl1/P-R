@@ -52,6 +52,9 @@ if (isDirectRun) {
     .then(async ({ paths, config }) => {
       const gh = createGhClient();
       const database = await ReviewDatabase.open(paths.database);
+      const recovered = await database.recoverInterruptedReviews();
+      if (recovered > 0)
+        console.warn(`Recovered ${recovered} interrupted review(s)`);
       const reviews = new ReviewService(
         database,
         gh,

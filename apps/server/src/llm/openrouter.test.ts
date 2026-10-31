@@ -92,6 +92,7 @@ describe('OpenRouterProvider', () => {
       model: 'openrouter/free',
       max_tokens: 8000,
       temperature: 0,
+      reasoning: { enabled: false, exclude: true },
       provider: { require_parameters: true },
       response_format: {
         type: 'json_schema',
@@ -161,6 +162,36 @@ describe('OpenRouterProvider', () => {
       provider.review({ system: 'System', prompt: 'Prompt' }),
     ).rejects.toBeInstanceOf(LlmNotConfiguredError);
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('includes finish and token diagnostics when content is empty', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+      new Response(
+        JSON.stringify({
+          model: 'nvidia/nemotron-3.5-super-vl:free',
+          choices: [
+            {
+              finish_reason: 'length',
+              native_finish_reason: 'max_tokens',
+              message: { content: '', reasoning: 'hidden reasoning' },
+            },
+          ],
+          usage: {
+            prompt_tokens: 24000,
+            completion_tokens: 8000,
+            completion_tokens_details: { reasoning_tokens: 8000 },
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    const provider = new OpenRouterProvider({ apiKey: 'test-key', fetch });
+
+    await expect(
+      provider.review({ system: 'System', prompt: 'Prompt' }),
+    ).rejects.toThrow(
+      /finish=length.*inputTokens=24000.*reasoningTokens=8000.*reasoningChars=16/,
+    );
   });
 
   it('fails after exactly one retry when both outputs are invalid', async () => {
