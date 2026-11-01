@@ -95,4 +95,20 @@ describe('shared contract', () => {
       }).success,
     ).toBe(true);
   });
+
+  it('marks ignored files in diff responses', () => {
+    expect(
+      ApiSchemas.reviews.diff.parse([
+        {
+          path: 'generated/client.ts',
+          status: 'modified',
+          isBinary: false,
+          ignored: true,
+          additions: 1,
+          deletions: 1,
+          hunks: [],
+        },
+      ])[0],
+    ).toMatchObject({ path: 'generated/client.ts', ignored: true });
+  });
 });

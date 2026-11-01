@@ -4,11 +4,7 @@ The shared API contract was established for Phase 0. Claude Code should add prop
 
 ## Requests
 
-### Mark ignored files in `GET /reviews/:id/diff` (requested by web, Phase 2)
-
-Add `ignored: z.boolean().optional()` to `DiffFileSchema`, true when the path matches the repo's `ignore_paths`. The web UI must collapse such files and tag them "ignored by rules" (PLAN 9.3), but the contract carries no such flag. Until it exists, the UI treats any non-binary file with no hunks as ignored.
-
-Phase 5 check against the real backend: `GET /reviews/:id/diff` returns ignored paths with full hunks (a 90-file PR showed no file without hunks), so nothing is collapsed or tagged as ignored yet. The flag is still needed.
+None.
 
 ## Applied changes
 
@@ -26,3 +22,8 @@ Phase 5 check against the real backend: `GET /reviews/:id/diff` returns ignored 
 ### Explicit OpenRouter free model — 2026-10-31
 
 1. Changed the default OpenRouter model from the dynamic `openrouter/free` router to `nvidia/nemotron-3.5-super-vl:free`, which advertises strict structured-output support. Existing configs using the former default are migrated on startup; explicitly configured models remain unchanged.
+
+### Ignored diff files — 2026-11-01
+
+1. Added `ignored: z.boolean().optional()` to `DiffFileSchema`. The backend sets it to `true` when a changed path matches the repository rules file's `review.ignore_paths`; included files omit the field.
+2. `GET /api/reviews/:id/diff` now preserves that marker while still returning the ignored file's hunks for display. Ignored files remain excluded from the LLM prompt.

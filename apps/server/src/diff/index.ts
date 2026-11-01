@@ -7,6 +7,7 @@ export type DiffFile = {
   oldPath?: string;
   status: 'added' | 'modified' | 'deleted' | 'renamed';
   isBinary: boolean;
+  ignored?: boolean;
   additions: number;
   deletions: number;
   hunks: DiffHunk[];

@@ -128,6 +128,7 @@ export const DiffFileSchema = z.object({
   oldPath: z.string().optional(),
   status: z.enum(['added', 'modified', 'deleted', 'renamed']),
   isBinary: z.boolean(),
+  ignored: z.boolean().optional(),
   additions: z.number().int().nonnegative(),
   deletions: z.number().int().nonnegative(),
   hunks: z.array(
