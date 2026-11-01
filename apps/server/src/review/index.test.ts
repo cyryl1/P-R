@@ -21,6 +21,12 @@ const diff = `diff --git a/src/pay.ts b/src/pay.ts
 @@ -1 +1,2 @@
  export const pay = () => true;
 +export const refund = () => false;
+diff --git a/docs/refunds.md b/docs/refunds.md
+new file mode 100644
+--- /dev/null
++++ b/docs/refunds.md
+@@ -0,0 +1 @@
++Refunds are supported.
 `;
 const pr: GhPr = {
   number: 7,
@@ -64,6 +70,7 @@ enabled: true
 review:
   max_comments: 3
   min_severity: minor
+  ignore_paths: [docs/**]
   context_files: [CONTRIBUTING.md]
 rules:
   - id: tests
@@ -117,6 +124,13 @@ describe('review orchestration', () => {
       line: 2,
       anchorStatus: 'valid',
     });
+    expect(service.getDiff(summary.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: 'src/pay.ts' }),
+        expect.objectContaining({ path: 'docs/refunds.md', ignored: true }),
+      ]),
+    );
+    expect(service.getDiff(summary.id)[0]).not.toHaveProperty('ignored');
     expect(detail.ruleResults).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ ruleId: 'tests', status: 'fail' }),
@@ -182,6 +196,17 @@ describe('review orchestration', () => {
       id: summary.id,
       status: 'draft_ready',
     });
+    const diffResponse = await app.inject({
+      method: 'GET',
+      url: `/api/reviews/${summary.id}/diff`,
+      headers: { host: 'localhost' },
+    });
+    expect(diffResponse.statusCode).toBe(200);
+    expect(diffResponse.json()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: 'docs/refunds.md', ignored: true }),
+      ]),
+    );
     const patch = await app.inject({
       method: 'PATCH',
       url: `/api/reviews/${summary.id}`,

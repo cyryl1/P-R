@@ -37,11 +37,12 @@ export async function gatherContext(
     gh.getPr(repo, number),
     gh.getDiff(repo, number),
   ]);
-  const files = parseDiff(diffRaw);
-  const promptFiles = files.filter(
-    (file) =>
-      !matchesAny(file.path, rulesDocument.parsed!.review.ignore_paths),
+  const files = parseDiff(diffRaw).map((file) =>
+    matchesAny(file.path, rulesDocument.parsed!.review.ignore_paths)
+      ? { ...file, ignored: true }
+      : file,
   );
+  const promptFiles = files.filter((file) => !file.ignored);
   const warnings: string[] = [];
   const contextFiles: ContextFile[] = [];
   for (const path of rulesDocument.parsed.review.context_files) {
