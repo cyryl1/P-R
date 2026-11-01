@@ -5,7 +5,7 @@ import { act } from 'react';
 import { describe, expect, it } from 'vitest';
 import { applyEvent } from '@/api/events';
 import { makeQueryClient } from '@/App';
-import { reviewDetail, reviewSummary } from '@/mocks/fixtures';
+import { diffFiles, reviewDetail, reviewSummary } from '@/mocks/fixtures';
 import { server } from '@/mocks/server';
 import { renderApp } from '@/test-utils';
 
@@ -191,6 +191,99 @@ describe('Review detail', () => {
   it('shows an error state for an unknown review', async () => {
     renderApp('/reviews/nope');
     expect(await screen.findByRole('alert')).toBeInTheDocument();
+  });
+
+  it('moves between comments with j and k, but not while typing', async () => {
+    const user = userEvent.setup();
+    renderApp('/reviews/rev_draft_ready');
+    const cards = await screen.findAllByRole('article');
+    await user.keyboard('j');
+    expect(cards[0]).toHaveFocus();
+    await user.keyboard('j');
+    expect(cards[1]).toHaveFocus();
+    await user.keyboard('k');
+    expect(cards[0]).toHaveFocus();
+
+    await user.click(screen.getByLabelText('Summary'));
+    await user.keyboard('j');
+    expect(screen.getByLabelText('Summary')).toHaveFocus();
+  });
+
+  it('saves the summary with Cmd+Enter', async () => {
+    const user = userEvent.setup();
+    let sent: unknown;
+    server.use(
+      http.patch('/api/reviews/:id', async ({ request }) => {
+        sent = await request.json();
+        return HttpResponse.json(reviewDetail('draft_ready'));
+      }),
+    );
+    renderApp('/reviews/rev_draft_ready');
+    const summary = await screen.findByLabelText('Summary');
+    await user.click(summary);
+    await user.type(summary, '!');
+    await user.keyboard('{Meta>}{Enter}{/Meta}');
+    await waitFor(() =>
+      expect(sent).toMatchObject({ summary: expect.stringMatching(/!$/) }),
+    );
+  });
+
+  it('submits a new comment with Cmd+Enter and cancels with Escape', async () => {
+    const user = userEvent.setup();
+    let sent: unknown;
+    server.use(
+      http.post('/api/reviews/:id/comments', async ({ request }) => {
+        sent = await request.json();
+        return HttpResponse.json({});
+      }),
+    );
+    renderApp('/reviews/rev_draft_ready');
+    await user.click(
+      await screen.findByRole('button', { name: 'Add comment on line 13' }),
+    );
+    await user.type(screen.getByLabelText('New comment'), 'Hi');
+    await user.keyboard('{Escape}');
+    expect(screen.queryByLabelText('New comment')).toBeNull();
+
+    await user.click(
+      screen.getByRole('button', { name: 'Add comment on line 13' }),
+    );
+    await user.type(screen.getByLabelText('New comment'), 'Hi');
+    await user.keyboard('{Meta>}{Enter}{/Meta}');
+    await waitFor(() => expect(sent).toMatchObject({ body: 'Hi', line: 13 }));
+  });
+
+  it('on a large PR only opens files that have comments, and can expand all', async () => {
+    const user = userEvent.setup();
+    const many = Array.from({ length: 10 }, (_, i) => ({
+      ...diffFiles[0]!,
+      path: i === 3 ? 'src/routes/refunds.ts' : `src/file${i}.ts`,
+    }));
+    server.use(
+      http.get('/api/reviews/:id/diff', () => HttpResponse.json(many)),
+    );
+    renderApp('/reviews/rev_draft_ready');
+    const commented = await screen.findByRole('region', {
+      name: 'src/routes/refunds.ts',
+    });
+    expect(
+      within(commented).getByRole('button', { name: /src\/routes/ }),
+    ).toHaveAttribute('aria-expanded', 'true');
+    const other = screen.getByRole('region', { name: 'src/file0.ts' });
+    expect(
+      within(other).getByRole('button', { name: /src\/file0\.ts/ }),
+    ).toHaveAttribute('aria-expanded', 'false');
+    await user.click(screen.getByRole('button', { name: 'Expand all' }));
+    expect(
+      within(other).getByRole('button', { name: /src\/file0\.ts/ }),
+    ).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('offers a way back when the review does not exist', async () => {
+    renderApp('/reviews/nope');
+    expect(
+      await screen.findByRole('link', { name: 'Back to Inbox' }),
+    ).toBeInTheDocument();
   });
 
   it('dismisses only after confirmation', async () => {
