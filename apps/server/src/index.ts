@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
-import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import type { FastifyBaseLogger } from 'fastify';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { AppConfigSchema, HealthResponseSchema } from '@pr-reviewer/shared';
 import type { AppConfig } from '@pr-reviewer/shared';
 import {
@@ -25,6 +26,8 @@ import { InboxService } from './inbox/index.js';
 import { EventHub } from './events/index.js';
 import { JobQueue } from './jobs/index.js';
 import { Poller } from './poller/index.js';
+import { createFileLogger } from './logging/index.js';
+import { registerProductionWeb } from './static/index.js';
 
 export type ServerOptions = {
   config?: AppConfig;
@@ -38,10 +41,16 @@ export type ServerOptions = {
   events?: EventHub;
   jobs?: JobQueue;
   poller?: Poller;
+  loggerInstance?: FastifyBaseLogger;
+  logger?: boolean;
+  production?: boolean;
+  webDist?: string;
 };
 
 export function createServer(options: ServerOptions = {}) {
-  const app = Fastify({ logger: true });
+  const app = options.loggerInstance
+    ? Fastify({ loggerInstance: options.loggerInstance })
+    : Fastify({ logger: options.logger ?? true });
   let config = options.config ?? AppConfigSchema.parse({});
   const paths = options.paths ?? resolveDataPaths();
   const gh = options.gh ?? createGhClient();
@@ -78,15 +87,9 @@ export function createServer(options: ServerOptions = {}) {
         },
         poller: {
           enabled: config.poller.enabled,
-          ...(pollStatus?.lastRunAt
-            ? { lastRunAt: pollStatus.lastRunAt }
-            : {}),
-          ...(pollStatus?.nextRunAt
-            ? { nextRunAt: pollStatus.nextRunAt }
-            : {}),
-          ...(pollStatus?.lastError
-            ? { lastError: pollStatus.lastError }
-            : {}),
+          ...(pollStatus?.lastRunAt ? { lastRunAt: pollStatus.lastRunAt } : {}),
+          ...(pollStatus?.nextRunAt ? { nextRunAt: pollStatus.nextRunAt } : {}),
+          ...(pollStatus?.lastError ? { lastError: pollStatus.lastError } : {}),
         },
         version: options.version ?? '0.1.0',
       }),
@@ -112,6 +115,12 @@ export function createServer(options: ServerOptions = {}) {
     registerActivityRoutes(app, options.reviews.database);
   }
   if (options.poller) registerPollRoutes(app, options.poller);
+  if (options.production)
+    registerProductionWeb(
+      app,
+      options.webDist ??
+        resolve(dirname(fileURLToPath(import.meta.url)), '../../web/dist'),
+    );
   return app;
 }
 
@@ -137,6 +146,9 @@ if (isDirectRun) {
       const jobs = new JobQueue(database, reviews, config);
       reviews.setQueue(jobs);
       const poller = new Poller(database, gh, reviews, paths, events, config);
+      const production =
+        process.argv.includes('--production') ||
+        process.env.NODE_ENV === 'production';
       const app = createServer({
         paths,
         config,
@@ -145,6 +157,8 @@ if (isDirectRun) {
         events,
         jobs,
         poller,
+        production,
+        loggerInstance: createFileLogger(paths.logs),
       });
       await jobs.start();
       poller.start();
