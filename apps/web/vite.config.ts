@@ -11,5 +11,7 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test-setup.ts'],
     css: false,
+    // Must stay above the 5 s asyncUtilTimeout in test-setup so a slow query fails with a clear message.
+    testTimeout: 15_000,
   },
 });
