@@ -279,6 +279,38 @@ describe('Review detail', () => {
     ).toHaveAttribute('aria-expanded', 'true');
   });
 
+  it('jumps to a file from the file list, opening it first', async () => {
+    const user = userEvent.setup();
+    const many = Array.from({ length: 10 }, (_, i) => ({
+      ...diffFiles[0]!,
+      path: i === 3 ? 'src/routes/refunds.ts' : `src/file${i}.ts`,
+    }));
+    server.use(
+      http.get('/api/reviews/:id/diff', () => HttpResponse.json(many)),
+    );
+    renderApp('/reviews/rev_draft_ready');
+    const index = await screen.findByRole('navigation', {
+      name: 'Changed files',
+    });
+    const target = screen.getByRole('region', { name: 'src/file7.ts' });
+    expect(
+      within(target).getByRole('button', { name: /src\/file7\.ts/ }),
+    ).toHaveAttribute('aria-expanded', 'false');
+    await user.type(within(index).getByLabelText('Filter files'), 'file7');
+    expect(within(index).getAllByRole('button')).toHaveLength(1);
+    await user.click(within(index).getByRole('button', { name: /file7/ }));
+    expect(
+      within(target).getByRole('button', { name: /src\/file7\.ts/ }),
+    ).toHaveAttribute('aria-expanded', 'true');
+
+    await user.clear(within(index).getByLabelText('Filter files'));
+    await user.click(within(index).getByLabelText('With comments'));
+    expect(within(index).getAllByRole('button')).toHaveLength(1);
+    expect(within(index).getByRole('button')).toHaveTextContent(
+      'src/routes/refunds.ts',
+    );
+  });
+
   it('offers a way back when the review does not exist', async () => {
     renderApp('/reviews/nope');
     expect(
