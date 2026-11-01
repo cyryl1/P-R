@@ -1,14 +1,16 @@
 import type { DiffSide, ReviewComment } from '@pr-reviewer/shared';
 import { ChevronDown, ChevronRight, Plus } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { DiffFile } from '@/api/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { AddCommentForm } from './AddCommentForm';
+import { FileIndex } from './FileIndex';
 import { CommentCard } from './CommentCard';
 
 const LARGE_DIFF_FILES = 8;
+const FILE_INDEX_MIN = 3;
 
 type Line = DiffFile['hunks'][number]['lines'][number];
 
@@ -52,6 +54,14 @@ export function DiffView({
   const setAll = (value: boolean) =>
     setCollapsed(Object.fromEntries(files.map((f) => [f.path, value])));
   const [adding, setAdding] = useState<string>();
+  const sections = useRef(new Map<string, HTMLElement>());
+  const [jumpTo, setJumpTo] = useState<string>();
+  // Scroll after the expand has rendered.
+  useEffect(() => {
+    if (!jumpTo) return;
+    sections.current.get(jumpTo)?.scrollIntoView?.({ block: 'start' });
+    setJumpTo(undefined);
+  }, [jumpTo, collapsed]);
 
   const inline = comments.filter((c) => c.anchorStatus === 'valid');
   const commentsAt = (path: string, a: { line: number; side: DiffSide }) =>
@@ -68,6 +78,16 @@ export function DiffView({
 
   return (
     <div className="space-y-4">
+      {files.length > FILE_INDEX_MIN ? (
+        <FileIndex
+          files={files}
+          commentCount={(path) => inline.filter((c) => c.path === path).length}
+          onSelect={(path) => {
+            setCollapsed((c) => ({ ...c, [path]: false }));
+            setJumpTo(path);
+          }}
+        />
+      ) : null}
       {files.length > 1 ? (
         <div className="flex items-center gap-2 text-sm">
           <span className="text-muted-foreground">{files.length} files</span>
@@ -85,6 +105,10 @@ export function DiffView({
         return (
           <section
             key={file.path}
+            ref={(el) => {
+              if (el) sections.current.set(file.path, el);
+              else sections.current.delete(file.path);
+            }}
             aria-label={file.path}
             className="rounded-md border border-border"
           >
