@@ -4,6 +4,7 @@ import { ApiError } from '@/api/client';
 import { useRerunReview, useReview, useReviewDiff } from '@/api/hooks';
 import { ErrorState, LoadingState } from '@/components/ErrorState';
 import { ActionBar } from '@/components/review/ActionBar';
+import { CommentList } from '@/components/review/CommentList';
 import { DiffView } from '@/components/review/DiffView';
 import { ReviewHeader } from '@/components/review/ReviewHeader';
 import { ReviewRail } from '@/components/review/ReviewRail';
@@ -94,7 +95,12 @@ export function ReviewDetail() {
       ) : null}
       <div className="flex gap-6">
         <ReviewRail review={data} editable={editable} />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 space-y-8">
+          <CommentList
+            reviewId={data.id}
+            comments={data.comments}
+            editable={editable}
+          />
           {diff.isPending ? (
             <LoadingState label="Loading diff…" />
           ) : diff.isError ? (

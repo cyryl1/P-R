@@ -21,10 +21,12 @@ export function CommentCard({
   reviewId,
   comment,
   editable,
+  preview = false,
 }: {
   reviewId: string;
   comment: ReviewComment;
   editable: boolean;
+  preview?: boolean;
 }) {
   const edit = useEditComment(reviewId);
   const remove = useDeleteComment(reviewId);
@@ -47,7 +49,7 @@ export function CommentCard({
   return (
     <article
       aria-label={`${comment.source === 'user' ? 'Your' : 'AI'} comment`}
-      data-comment-card
+      {...(preview ? {} : { 'data-comment-card': true })}
       tabIndex={-1}
       className={cn(
         'rounded-md border border-l-4 bg-background p-3 text-left font-sans focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',

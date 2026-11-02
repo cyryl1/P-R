@@ -30,7 +30,7 @@ describe('Review detail', () => {
     expect(unanchored.getByText(/is unanchored\./)).toBeInTheDocument();
   });
 
-  it('renders comments inline under their line, with the unanchored one only in the rail', async () => {
+  it('lists comments to post and previews them under their line', async () => {
     renderApp('/reviews/rev_draft_ready');
     const file = await screen.findByRole('region', {
       name: 'src/routes/refunds.ts',
@@ -39,7 +39,10 @@ describe('Review detail', () => {
       await within(file).findByText(/missing/, { selector: 'p' }),
     ).toBeInTheDocument();
     expect(within(file).getAllByRole('article')).toHaveLength(3);
-    expect(screen.getAllByText(/is unanchored\./)).toHaveLength(1);
+    expect(screen.getAllByText(/is unanchored\./)).toHaveLength(2);
+    expect(
+      screen.getByRole('heading', { name: 'Comments to post' }),
+    ).toBeInTheDocument();
   });
 
   it('shows binary placeholder and collapses files without hunks', async () => {
@@ -107,11 +110,11 @@ describe('Review detail', () => {
     const [first] = await screen.findAllByRole('combobox', {
       name: 'Severity',
     });
-    // First card in DOM order is the excluded user comment on the deleted line.
+    // First card in the list is the first comment from the server.
     await user.selectOptions(first!, 'major');
     await user.click(screen.getAllByLabelText('Include')[0]!);
     await waitFor(() =>
-      expect(sent).toEqual([{ severity: 'major' }, { included: true }]),
+      expect(sent).toEqual([{ severity: 'major' }, { included: false }]),
     );
   });
 

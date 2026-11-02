@@ -201,7 +201,8 @@ export function DiffView({
                                   key={c.id}
                                   reviewId={reviewId}
                                   comment={c}
-                                  editable={editable}
+                                  editable={false}
+                                  preview
                                 />
                               ))}
                               {adding === key ? (

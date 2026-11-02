@@ -4,7 +4,13 @@ The shared API contract was established for Phase 0. Claude Code should add prop
 
 ## Requests
 
-None.
+### Plain-English rules (requested by Claude Code)
+
+Writing the rules YAML by hand is too technical. The Rules editor will get a "Describe your rules" box. Proposed endpoint:
+
+`POST /api/projects/draft-rules`, body `{repo: "owner/name", description: string, currentYaml?: string}`, response `{yaml: string, valid: boolean, errors: [{path, message}]}`.
+
+The server asks the configured LLM to turn the description into a rules file, validates it with the existing rules schema (one repair attempt on failure), and returns the YAML. It never saves. The UI shows the result in the editor for the user to review and save. When `currentYaml` is given, the description is applied as a change to it. Errors: `LLM_NOT_CONFIGURED`, `LLM_FAILED`.
 
 ## Applied changes
 
