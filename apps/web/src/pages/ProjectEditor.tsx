@@ -179,7 +179,7 @@ export function ProjectEditor() {
         onDraft={setText}
       />
 
-      <div className="grid grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <YamlEditor
           ref={editor}
           value={current}

@@ -34,7 +34,10 @@ export function ReviewRail({
   );
 
   return (
-    <aside className="w-80 shrink-0 space-y-6" aria-label="Review details">
+    <aside
+      className="w-full shrink-0 space-y-6 lg:w-80"
+      aria-label="Review details"
+    >
       <div className="space-y-1">
         <label htmlFor="verdict" className="text-sm font-medium">
           Verdict

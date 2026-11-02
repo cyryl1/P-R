@@ -28,7 +28,7 @@ function Field({
   children: ReactNode;
 }) {
   return (
-    <label className="grid grid-cols-[16rem_1fr] items-center gap-4 text-sm">
+    <label className="grid gap-1 text-sm sm:grid-cols-[16rem_1fr] sm:items-center sm:gap-4">
       <span>
         {label}
         {hint ? (
@@ -68,7 +68,7 @@ function NumberInput({
 
 function Row({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div className="grid grid-cols-[16rem_1fr] gap-4 text-sm">
+    <div className="grid gap-1 text-sm sm:grid-cols-[16rem_1fr] sm:gap-4">
       <dt className="text-muted-foreground">{label}</dt>
       <dd>{value}</dd>
     </div>

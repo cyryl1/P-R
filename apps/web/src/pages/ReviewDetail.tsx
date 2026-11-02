@@ -93,7 +93,7 @@ export function ReviewDetail() {
           This review is read-only.
         </p>
       ) : null}
-      <div className="flex gap-6">
+      <div className="flex flex-col gap-6 lg:flex-row">
         <ReviewRail review={data} editable={editable} />
         <div className="min-w-0 flex-1 space-y-8">
           <CommentList

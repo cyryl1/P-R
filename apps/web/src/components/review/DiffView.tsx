@@ -146,82 +146,86 @@ export function DiffView({
                 Binary file not shown.
               </p>
             ) : (
-              <table className="w-full border-collapse font-mono text-xs">
-                <tbody>
-                  {file.hunks.flatMap((hunk) => [
-                    <tr key={`${hunk.header}-h`} className="bg-muted/60">
-                      <td
-                        colSpan={4}
-                        className="px-3 py-1 text-muted-foreground"
-                      >
-                        {hunk.header}
-                      </td>
-                    </tr>,
-                    ...hunk.lines.flatMap((line, i) => {
-                      const anchor = anchorOf(line);
-                      const key = anchor
-                        ? `${file.path}:${anchor.side}:${anchor.line}`
-                        : undefined;
-                      const here = anchor ? commentsAt(file.path, anchor) : [];
-                      const rows = [
-                        <tr
-                          key={`${hunk.header}-${i}`}
-                          className={cn('group', rowTint[line.kind])}
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse font-mono text-xs">
+                  <tbody>
+                    {file.hunks.flatMap((hunk) => [
+                      <tr key={`${hunk.header}-h`} className="bg-muted/60">
+                        <td
+                          colSpan={4}
+                          className="px-3 py-1 text-muted-foreground"
                         >
-                          <td className="w-10 select-none px-1 text-right text-muted-foreground">
-                            {line.oldLine}
-                          </td>
-                          <td className="w-10 select-none px-1 text-right text-muted-foreground">
-                            {line.newLine}
-                          </td>
-                          <td className="w-6 text-center">
-                            {editable && anchor && key ? (
-                              <button
-                                type="button"
-                                aria-label={`Add comment on line ${anchor.line}`}
-                                className="invisible rounded bg-primary text-primary-foreground group-hover:visible focus-visible:visible"
-                                onClick={() => setAdding(key)}
-                              >
-                                <Plus className="h-3 w-3" />
-                              </button>
-                            ) : null}
-                          </td>
-                          <td className="whitespace-pre px-2">
-                            {marker[line.kind]}
-                            {line.text}
-                          </td>
-                        </tr>,
-                      ];
-                      if (anchor && (here.length || adding === key))
-                        rows.push(
-                          <tr key={`${hunk.header}-${i}-c`}>
-                            <td colSpan={4} className="space-y-2 p-2">
-                              {here.map((c) => (
-                                <CommentCard
-                                  key={c.id}
-                                  reviewId={reviewId}
-                                  comment={c}
-                                  editable={false}
-                                  preview
-                                />
-                              ))}
-                              {adding === key ? (
-                                <AddCommentForm
-                                  reviewId={reviewId}
-                                  path={file.path}
-                                  line={anchor.line}
-                                  side={anchor.side}
-                                  onDone={() => setAdding(undefined)}
-                                />
+                          {hunk.header}
+                        </td>
+                      </tr>,
+                      ...hunk.lines.flatMap((line, i) => {
+                        const anchor = anchorOf(line);
+                        const key = anchor
+                          ? `${file.path}:${anchor.side}:${anchor.line}`
+                          : undefined;
+                        const here = anchor
+                          ? commentsAt(file.path, anchor)
+                          : [];
+                        const rows = [
+                          <tr
+                            key={`${hunk.header}-${i}`}
+                            className={cn('group', rowTint[line.kind])}
+                          >
+                            <td className="w-10 select-none px-1 text-right text-muted-foreground">
+                              {line.oldLine}
+                            </td>
+                            <td className="w-10 select-none px-1 text-right text-muted-foreground">
+                              {line.newLine}
+                            </td>
+                            <td className="w-6 text-center">
+                              {editable && anchor && key ? (
+                                <button
+                                  type="button"
+                                  aria-label={`Add comment on line ${anchor.line}`}
+                                  className="invisible rounded bg-primary text-primary-foreground group-hover:visible focus-visible:visible"
+                                  onClick={() => setAdding(key)}
+                                >
+                                  <Plus className="h-3 w-3" />
+                                </button>
                               ) : null}
                             </td>
+                            <td className="whitespace-pre px-2">
+                              {marker[line.kind]}
+                              {line.text}
+                            </td>
                           </tr>,
-                        );
-                      return rows;
-                    }),
-                  ])}
-                </tbody>
-              </table>
+                        ];
+                        if (anchor && (here.length || adding === key))
+                          rows.push(
+                            <tr key={`${hunk.header}-${i}-c`}>
+                              <td colSpan={4} className="space-y-2 p-2">
+                                {here.map((c) => (
+                                  <CommentCard
+                                    key={c.id}
+                                    reviewId={reviewId}
+                                    comment={c}
+                                    editable={false}
+                                    preview
+                                  />
+                                ))}
+                                {adding === key ? (
+                                  <AddCommentForm
+                                    reviewId={reviewId}
+                                    path={file.path}
+                                    line={anchor.line}
+                                    side={anchor.side}
+                                    onDone={() => setAdding(undefined)}
+                                  />
+                                ) : null}
+                              </td>
+                            </tr>,
+                          );
+                        return rows;
+                      }),
+                    ])}
+                  </tbody>
+                </table>
+              </div>
             )}
           </section>
         );

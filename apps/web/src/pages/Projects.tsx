@@ -86,46 +86,48 @@ export function Projects() {
           reviewed.
         </p>
       ) : (
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-border text-muted-foreground">
-            <tr>
-              <th className="py-2 font-normal">Repo</th>
-              <th className="font-normal">Enabled</th>
-              <th className="font-normal">Rules file</th>
-              <th className="font-normal">Rules</th>
-              <th className="font-normal">Updated</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((project) => (
-              <tr key={project.repo} className="border-b border-border">
-                <td className="py-2">
-                  <Link
-                    className="font-medium hover:underline"
-                    to={`/projects/${project.repo}`}
-                  >
-                    {project.repo}
-                  </Link>
-                </td>
-                <td>{project.enabled ? 'Yes' : 'No'}</td>
-                <td>
-                  {project.valid ? (
-                    <Badge variant="success">Valid</Badge>
-                  ) : (
-                    <Badge variant="destructive">
-                      Invalid · {project.errorCount}{' '}
-                      {project.errorCount === 1 ? 'error' : 'errors'}
-                    </Badge>
-                  )}
-                </td>
-                <td>{project.ruleCount}</td>
-                <td className="text-muted-foreground">
-                  {formatRelative(project.updatedAt)}
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-border text-muted-foreground">
+              <tr>
+                <th className="py-2 font-normal">Repo</th>
+                <th className="font-normal">Enabled</th>
+                <th className="font-normal">Rules file</th>
+                <th className="font-normal">Rules</th>
+                <th className="font-normal">Updated</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {data.map((project) => (
+                <tr key={project.repo} className="border-b border-border">
+                  <td className="py-2">
+                    <Link
+                      className="font-medium hover:underline"
+                      to={`/projects/${project.repo}`}
+                    >
+                      {project.repo}
+                    </Link>
+                  </td>
+                  <td>{project.enabled ? 'Yes' : 'No'}</td>
+                  <td>
+                    {project.valid ? (
+                      <Badge variant="success">Valid</Badge>
+                    ) : (
+                      <Badge variant="destructive">
+                        Invalid · {project.errorCount}{' '}
+                        {project.errorCount === 1 ? 'error' : 'errors'}
+                      </Badge>
+                    )}
+                  </td>
+                  <td>{project.ruleCount}</td>
+                  <td className="text-muted-foreground">
+                    {formatRelative(project.updatedAt)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
       <NewProjectDialog open={creating} onClose={() => setCreating(false)} />
     </section>
