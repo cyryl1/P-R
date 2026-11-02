@@ -14,6 +14,7 @@ import {
   errorMessage,
   LoadingState,
 } from '@/components/ErrorState';
+import { DescribeRules } from '@/components/projects/DescribeRules';
 import { ParsedSummary } from '@/components/projects/ParsedSummary';
 import { ReferenceDrawer } from '@/components/projects/ReferenceDrawer';
 import {
@@ -170,6 +171,13 @@ export function ProjectEditor() {
           </Button>
         </div>
       </div>
+
+      <DescribeRules
+        repo={repo}
+        currentYaml={current}
+        isNew={isNew}
+        onDraft={setText}
+      />
 
       <div className="grid grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-4">
         <YamlEditor
