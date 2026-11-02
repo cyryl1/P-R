@@ -90,7 +90,7 @@ describe('plain-English rules drafting', () => {
     ).toContain('repo must match acme/billing');
   });
 
-  it('returns the second invalid draft and its validation errors', async () => {
+  it('fails instead of returning an invalid second draft', async () => {
     const invalid = 'version: 1\nrepo: acme/other\nrules: []\n';
     const generateStructured = vi.fn().mockResolvedValue(generated(invalid));
 
@@ -99,16 +99,9 @@ describe('plain-English rules drafting', () => {
         { generateStructured },
         { repo: 'acme/billing', description: 'Review carefully.' },
       ),
-    ).resolves.toMatchObject({
-      yaml: invalid,
-      valid: false,
-      errors: [
-        expect.objectContaining({
-          path: 'repo',
-          message: 'repo must match acme/billing',
-        }),
-      ],
-    });
+    ).rejects.toThrow(
+      'The model returned invalid rules after one repair: repo: repo must match acme/billing',
+    );
     expect(generateStructured).toHaveBeenCalledTimes(2);
   });
 });
