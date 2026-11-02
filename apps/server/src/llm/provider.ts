@@ -20,10 +20,28 @@ export type ProviderReviewResult = {
   meta: ProviderMeta;
 };
 
+export type StructuredGenerationInput = {
+  system: string;
+  prompt: string;
+  schemaName: string;
+  schema: Record<string, unknown>;
+  maxOutputTokens?: number;
+  validationFeedback?: string;
+  mockContent?: string;
+};
+
+export type ProviderGenerationResult = {
+  content: string;
+  meta: ProviderMeta;
+};
+
 export interface ReviewProvider {
   readonly name: string;
   readonly model: string;
   review(input: ReviewInput): Promise<ProviderReviewResult>;
+  generateStructured(
+    input: StructuredGenerationInput,
+  ): Promise<ProviderGenerationResult>;
 }
 
 export class LlmNotConfiguredError extends Error {

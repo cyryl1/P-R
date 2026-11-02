@@ -8,9 +8,11 @@ import {
   LlmNotConfiguredError,
   LlmProviderError,
   type ProviderMeta,
+  type ProviderGenerationResult,
   type ProviderReviewResult,
   type ReviewInput,
   type ReviewProvider,
+  type StructuredGenerationInput,
 } from './provider.js';
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
@@ -89,51 +91,18 @@ export class OpenRouterProvider implements ReviewProvider {
   }
 
   async review(input: ReviewInput): Promise<ProviderReviewResult> {
-    if (!this.apiKey) throw new LlmNotConfiguredError('OpenRouter');
-
-    const startedAt = performance.now();
     let validationFeedback: string | undefined;
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      const response = await this.request(input, validationFeedback);
-      const content = response.body.choices?.[0]?.message?.content;
-      const refusal = response.body.choices?.[0]?.message?.refusal;
-      if (refusal)
-        throw new LlmProviderError(`OpenRouter refused the review: ${refusal}`);
-      if (!content) {
-        const choice = response.body.choices?.[0];
-        const usage = response.body.usage;
-        const diagnostics = [
-          choice?.finish_reason
-            ? `finish=${choice.finish_reason}`
-            : undefined,
-          choice?.native_finish_reason
-            ? `nativeFinish=${choice.native_finish_reason}`
-            : undefined,
-          usage?.prompt_tokens !== undefined
-            ? `inputTokens=${usage.prompt_tokens}`
-            : undefined,
-          usage?.completion_tokens !== undefined
-            ? `outputTokens=${usage.completion_tokens}`
-            : undefined,
-          usage?.completion_tokens_details?.reasoning_tokens !== undefined
-            ? `reasoningTokens=${usage.completion_tokens_details.reasoning_tokens}`
-            : undefined,
-          choice?.message?.reasoning
-            ? `reasoningChars=${choice.message.reasoning.length}`
-            : undefined,
-        ].filter(Boolean);
-        throw new LlmProviderError(
-          `OpenRouter returned no review content${diagnostics.length ? ` (${diagnostics.join(', ')})` : ''}`,
-        );
-      }
+      const generated = await this.generateStructured({
+        ...input,
+        schemaName: 'review_output',
+        schema: strictReviewSchema(),
+        ...(validationFeedback ? { validationFeedback } : {}),
+      });
 
       try {
-        const output = parseOutput(content);
-        return {
-          output,
-          meta: this.meta(response.body, startedAt),
-        };
+        return { output: parseOutput(generated.content), meta: generated.meta };
       } catch (error) {
         validationFeedback = validationMessage(error);
         if (attempt === 1) {
@@ -150,7 +119,21 @@ export class OpenRouterProvider implements ReviewProvider {
     throw new LlmProviderError('OpenRouter review failed');
   }
 
-  private async request(input: ReviewInput, validationFeedback?: string) {
+  async generateStructured(
+    input: StructuredGenerationInput,
+  ): Promise<ProviderGenerationResult> {
+    if (!this.apiKey) throw new LlmNotConfiguredError('OpenRouter');
+    const startedAt = performance.now();
+    const response = await this.request(input);
+    const content = response.body.choices?.[0]?.message?.content;
+    const refusal = response.body.choices?.[0]?.message?.refusal;
+    if (refusal)
+      throw new LlmProviderError(`OpenRouter refused the request: ${refusal}`);
+    if (!content) throw this.emptyContentError(response.body);
+    return { content, meta: this.meta(response.body, startedAt) };
+  }
+
+  private async request(input: StructuredGenerationInput) {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.apiKey}`,
       'Content-Type': 'application/json',
@@ -161,11 +144,11 @@ export class OpenRouterProvider implements ReviewProvider {
     const messages = [
       { role: 'system', content: input.system },
       { role: 'user', content: input.prompt },
-      ...(validationFeedback
+      ...(input.validationFeedback
         ? [
             {
               role: 'user',
-              content: `Your previous response was invalid: ${validationFeedback}. Return only a corrected response matching the JSON schema.`,
+              content: `Your previous response was invalid: ${input.validationFeedback}. Return only a corrected response matching the JSON schema.`,
             },
           ]
         : []),
@@ -186,9 +169,9 @@ export class OpenRouterProvider implements ReviewProvider {
           response_format: {
             type: 'json_schema',
             json_schema: {
-              name: 'review_output',
+              name: input.schemaName,
               strict: true,
-              schema: strictReviewSchema(),
+              schema: input.schema,
             },
           },
           provider: { require_parameters: true },
@@ -215,6 +198,32 @@ export class OpenRouterProvider implements ReviewProvider {
       );
     }
     return { body, status: response.status };
+  }
+
+  private emptyContentError(body: OpenRouterResponse) {
+    const choice = body.choices?.[0];
+    const usage = body.usage;
+    const diagnostics = [
+      choice?.finish_reason ? `finish=${choice.finish_reason}` : undefined,
+      choice?.native_finish_reason
+        ? `nativeFinish=${choice.native_finish_reason}`
+        : undefined,
+      usage?.prompt_tokens !== undefined
+        ? `inputTokens=${usage.prompt_tokens}`
+        : undefined,
+      usage?.completion_tokens !== undefined
+        ? `outputTokens=${usage.completion_tokens}`
+        : undefined,
+      usage?.completion_tokens_details?.reasoning_tokens !== undefined
+        ? `reasoningTokens=${usage.completion_tokens_details.reasoning_tokens}`
+        : undefined,
+      choice?.message?.reasoning
+        ? `reasoningChars=${choice.message.reasoning.length}`
+        : undefined,
+    ].filter(Boolean);
+    return new LlmProviderError(
+      `OpenRouter returned no content${diagnostics.length ? ` (${diagnostics.join(', ')})` : ''}`,
+    );
   }
 
   private async readBody(response: Response): Promise<OpenRouterResponse> {

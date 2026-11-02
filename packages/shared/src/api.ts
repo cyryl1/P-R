@@ -216,6 +216,22 @@ export const ApiSchemas = {
       errors: z.array(RulesErrorSchema),
       parsed: RulesFileSchema.optional(),
     }),
+    draftRules: z.object({
+      repo: z.string().regex(/^[^/\s]+\/[^/\s]+$/),
+      description: z.string().trim().min(1).max(10_000),
+      currentYaml: z.string().max(100_000).optional(),
+    }),
+    draftRulesResponse: z.object({
+      yaml: z.string(),
+      valid: z.boolean(),
+      errors: z.array(RulesErrorSchema),
+    }),
+    draftRulesError: z.object({
+      error: z.object({
+        code: z.enum(['LLM_NOT_CONFIGURED', 'LLM_FAILED']),
+        message: z.string(),
+      }),
+    }),
     templateQuery: z.object({ repo: z.string() }),
     templateResponse: z.object({ yaml: z.string() }),
     params: z.object({ owner: z.string(), repo: z.string() }),

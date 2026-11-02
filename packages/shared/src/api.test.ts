@@ -111,4 +111,34 @@ describe('shared contract', () => {
       ])[0],
     ).toMatchObject({ path: 'generated/client.ts', ignored: true });
   });
+
+  it('validates the plain-English rules endpoint contract', () => {
+    expect(
+      ApiSchemas.projects.draftRules.parse({
+        repo: 'acme/billing',
+        description: 'Require tests for service changes.',
+      }),
+    ).toEqual({
+      repo: 'acme/billing',
+      description: 'Require tests for service changes.',
+    });
+    expect(
+      ApiSchemas.projects.draftRules.safeParse({
+        repo: 'not-a-repo',
+        description: '',
+      }).success,
+    ).toBe(false);
+    expect(
+      ApiSchemas.projects.draftRulesResponse.safeParse({
+        yaml: 'version: 1',
+        valid: false,
+        errors: [{ path: 'repo', message: 'Required' }],
+      }).success,
+    ).toBe(true);
+    expect(
+      ApiSchemas.projects.draftRulesError.parse({
+        error: { code: 'LLM_FAILED', message: 'Provider unavailable' },
+      }).error.code,
+    ).toBe('LLM_FAILED');
+  });
 });

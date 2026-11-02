@@ -20,6 +20,7 @@ import { registerEventRoutes } from './api/events.js';
 import { registerPollRoutes } from './api/poll.js';
 import { ReviewDatabase } from './db/index.js';
 import { createReviewProvider } from './llm/index.js';
+import type { ReviewProvider } from './llm/provider.js';
 import { ReviewService } from './review/index.js';
 import { PublishService } from './publish/index.js';
 import { InboxService } from './inbox/index.js';
@@ -36,6 +37,7 @@ export type ServerOptions = {
   env?: NodeJS.ProcessEnv;
   version?: string;
   reviews?: ReviewService;
+  rulesProvider?: ReviewProvider;
   publisher?: PublishService;
   inbox?: InboxService;
   events?: EventHub;
@@ -95,7 +97,11 @@ export function createServer(options: ServerOptions = {}) {
       }),
     );
   });
-  registerProjectRoutes(app, paths);
+  registerProjectRoutes(
+    app,
+    paths,
+    () => options.rulesProvider ?? createReviewProvider(config, env),
+  );
   registerEventRoutes(app, events);
   const settings = new SettingsService(paths, config, (updated) => {
     config = updated;
