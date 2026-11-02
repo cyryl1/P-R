@@ -55,44 +55,46 @@ function ReviewsTab() {
         <p className="text-sm text-muted-foreground">No reviews match.</p>
       ) : (
         <>
-          <table className="w-full text-sm">
-            <caption className="sr-only">Review history</caption>
-            <thead className="text-left text-xs text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2 font-medium">PR</th>
-                <th className="px-3 py-2 font-medium">Title</th>
-                <th className="px-3 py-2 font-medium">Trigger</th>
-                <th className="px-3 py-2 font-medium">Comments</th>
-                <th className="px-3 py-2 font-medium">Updated</th>
-                <th className="px-3 py-2 font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((r) => (
-                <tr key={r.id} className="border-t border-border">
-                  <td className="px-3 py-2 font-mono text-xs">
-                    {r.repo}#{r.number}
-                  </td>
-                  <td className="px-3 py-2">
-                    <Link to={`/reviews/${r.id}`} className="hover:underline">
-                      {r.prTitle}
-                    </Link>
-                  </td>
-                  <td className="px-3 py-2">{r.trigger}</td>
-                  <td className="px-3 py-2">
-                    {r.commentCount}
-                    {r.blockerCount ? ` (${r.blockerCount} blocker)` : ''}
-                  </td>
-                  <td className="px-3 py-2 text-muted-foreground">
-                    {formatRelative(r.updatedAt)}
-                  </td>
-                  <td className="px-3 py-2">
-                    <StatusBadge status={r.status} />
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <caption className="sr-only">Review history</caption>
+              <thead className="text-left text-xs text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2 font-medium">PR</th>
+                  <th className="px-3 py-2 font-medium">Title</th>
+                  <th className="px-3 py-2 font-medium">Trigger</th>
+                  <th className="px-3 py-2 font-medium">Comments</th>
+                  <th className="px-3 py-2 font-medium">Updated</th>
+                  <th className="px-3 py-2 font-medium">Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {items.map((r) => (
+                  <tr key={r.id} className="border-t border-border">
+                    <td className="px-3 py-2 font-mono text-xs">
+                      {r.repo}#{r.number}
+                    </td>
+                    <td className="px-3 py-2">
+                      <Link to={`/reviews/${r.id}`} className="hover:underline">
+                        {r.prTitle}
+                      </Link>
+                    </td>
+                    <td className="px-3 py-2">{r.trigger}</td>
+                    <td className="px-3 py-2">
+                      {r.commentCount}
+                      {r.blockerCount ? ` (${r.blockerCount} blocker)` : ''}
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {formatRelative(r.updatedAt)}
+                    </td>
+                    <td className="px-3 py-2">
+                      <StatusBadge status={r.status} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           {history.hasNextPage ? (
             <Button
               variant="outline"

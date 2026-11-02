@@ -148,32 +148,34 @@ export function Inbox() {
           </p>
         </div>
       ) : (
-        <table className="w-full text-sm">
-          <caption className="sr-only">
-            Pull requests waiting for your review
-          </caption>
-          <thead className="text-left text-xs text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2 font-medium">PR</th>
-              <th className="px-3 py-2 font-medium">Title</th>
-              <th className="px-3 py-2 font-medium">Author</th>
-              <th className="px-3 py-2 font-medium">Updated</th>
-              <th className="px-3 py-2 font-medium">Status</th>
-              <th className="px-3 py-2" />
-            </tr>
-          </thead>
-          <tbody>
-            {[...inbox.data]
-              .sort(
-                (a, b) =>
-                  new Date(b.pr.updatedAt).getTime() -
-                  new Date(a.pr.updatedAt).getTime(),
-              )
-              .map((item) => (
-                <Row key={`${item.pr.repo}#${item.pr.number}`} item={item} />
-              ))}
-          </tbody>
-        </table>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <caption className="sr-only">
+              Pull requests waiting for your review
+            </caption>
+            <thead className="text-left text-xs text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2 font-medium">PR</th>
+                <th className="px-3 py-2 font-medium">Title</th>
+                <th className="px-3 py-2 font-medium">Author</th>
+                <th className="px-3 py-2 font-medium">Updated</th>
+                <th className="px-3 py-2 font-medium">Status</th>
+                <th className="px-3 py-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {[...inbox.data]
+                .sort(
+                  (a, b) =>
+                    new Date(b.pr.updatedAt).getTime() -
+                    new Date(a.pr.updatedAt).getTime(),
+                )
+                .map((item) => (
+                  <Row key={`${item.pr.repo}#${item.pr.number}`} item={item} />
+                ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

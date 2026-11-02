@@ -86,42 +86,48 @@ export function ReferenceDrawer() {
       </button>
       {open ? (
         <div className="space-y-4 border-t border-border p-4 text-sm">
-          <table className="w-full text-left">
-            <caption className="mb-1 text-left font-medium">Fields</caption>
-            <tbody>
-              {fields.map(([name, text]) => (
-                <tr key={name} className="border-t border-border align-top">
-                  <td className="py-1 pr-4">
-                    <code className="text-xs">{name}</code>
-                  </td>
-                  <td className="py-1 text-muted-foreground">{text}</td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <caption className="mb-1 text-left font-medium">Fields</caption>
+              <tbody>
+                {fields.map(([name, text]) => (
+                  <tr key={name} className="border-t border-border align-top">
+                    <td className="py-1 pr-4">
+                      <code className="text-xs">{name}</code>
+                    </td>
+                    <td className="py-1 text-muted-foreground">{text}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <caption className="mb-1 text-left font-medium">
+                Rule types
+              </caption>
+              <thead className="text-muted-foreground">
+                <tr>
+                  <th className="pr-4 font-normal">type</th>
+                  <th className="pr-4 font-normal">fields</th>
+                  <th className="font-normal">passes when</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          <table className="w-full text-left">
-            <caption className="mb-1 text-left font-medium">Rule types</caption>
-            <thead className="text-muted-foreground">
-              <tr>
-                <th className="pr-4 font-normal">type</th>
-                <th className="pr-4 font-normal">fields</th>
-                <th className="font-normal">passes when</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ruleTypes.map(([type, fieldList, passes]) => (
-                <tr key={type} className="border-t border-border align-top">
-                  <td className="py-1 pr-4">
-                    <code className="text-xs">{type}</code>
-                  </td>
-                  <td className="py-1 pr-4 text-muted-foreground">
-                    {fieldList}
-                  </td>
-                  <td className="py-1 text-muted-foreground">{passes}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {ruleTypes.map(([type, fieldList, passes]) => (
+                  <tr key={type} className="border-t border-border align-top">
+                    <td className="py-1 pr-4">
+                      <code className="text-xs">{type}</code>
+                    </td>
+                    <td className="py-1 pr-4 text-muted-foreground">
+                      {fieldList}
+                    </td>
+                    <td className="py-1 text-muted-foreground">{passes}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : null}
     </section>

@@ -37,6 +37,6 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
-    min-width: 1280px;
+    overflow-wrap: anywhere;
   }
 }

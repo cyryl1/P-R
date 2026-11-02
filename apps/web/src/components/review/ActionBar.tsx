@@ -32,7 +32,7 @@ export function ActionBar({ review }: { review: ReviewDetail }) {
   const active = isEditable(review.status);
 
   return (
-    <div className="sticky bottom-0 flex items-center gap-3 border-t border-border bg-background py-3">
+    <div className="sticky bottom-0 flex flex-wrap items-center gap-3 border-t border-border bg-background py-3">
       <p className="text-sm">
         {review.comments.length} comments · {blockers} blockers · {excluded}{' '}
         excluded
@@ -41,7 +41,7 @@ export function ActionBar({ review }: { review: ReviewDetail }) {
         <kbd>j</kbd>/<kbd>k</kbd> next/previous comment · <kbd>⌘</kbd>
         <kbd>↵</kbd> save
       </p>
-      <div className="ml-auto flex gap-2">
+      <div className="ml-auto flex flex-wrap gap-2">
         <Button variant="outline" disabled={rerun.isPending} onClick={doRerun}>
           Rerun
         </Button>
