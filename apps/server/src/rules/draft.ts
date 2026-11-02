@@ -58,12 +58,17 @@ function validationFeedback(errors: RulesError[]) {
     .join('; ');
 }
 
+function normalizeYaml(yaml: string) {
+  return yaml.replace(/\r\n/g, '\n').trim();
+}
+
 export async function draftRules(
   provider: Pick<ReviewProvider, 'generateStructured'>,
   input: DraftRulesInput,
 ): Promise<DraftRulesResult> {
   let feedback: string | undefined;
   let lastYaml = '';
+  const startingYaml = input.currentYaml;
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const generated = await provider.generateStructured({
@@ -98,8 +103,20 @@ export async function draftRules(
     }
 
     const validation = validateRulesYaml(lastYaml, input.repo);
-    if (validation.valid)
+    const unchanged =
+      startingYaml !== undefined &&
+      normalizeYaml(lastYaml) === normalizeYaml(startingYaml);
+    if (validation.valid && !unchanged)
       return { yaml: lastYaml, valid: true, errors: [] };
+    if (validation.valid && unchanged) {
+      feedback =
+        'The YAML is unchanged. Apply the requested rules and return a meaningfully updated complete YAML file.';
+      if (attempt === 1)
+        throw new LlmProviderError(
+          'The model returned the existing rules unchanged after one repair',
+        );
+      continue;
+    }
     if (attempt === 1)
       return { yaml: lastYaml, valid: false, errors: validation.errors };
     feedback = validationFeedback(validation.errors);
