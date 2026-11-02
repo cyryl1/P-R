@@ -14,6 +14,53 @@ const generated = (yaml: string) => ({
 });
 
 describe('plain-English rules drafting', () => {
+  it('repairs an unchanged draft once', async () => {
+    const currentYaml = 'version: 1\nrepo: acme/billing\nrules: []\n';
+    const changedYaml = templateFor('acme/billing').replace(
+      'rules: []',
+      'rules:\n  - id: require-tests\n    type: require_tests\n    severity: major\n    enabled: true',
+    );
+    const generateStructured = vi
+      .fn()
+      .mockResolvedValueOnce(generated(currentYaml))
+      .mockResolvedValueOnce(generated(changedYaml));
+
+    await expect(
+      draftRules(
+        { generateStructured },
+        {
+          repo: 'acme/billing',
+          description: 'Require tests.',
+          currentYaml,
+        },
+      ),
+    ).resolves.toEqual({ yaml: changedYaml, valid: true, errors: [] });
+
+    expect(generateStructured).toHaveBeenCalledTimes(2);
+    expect(
+      generateStructured.mock.calls[1]?.[0].validationFeedback,
+    ).toContain('YAML is unchanged');
+  });
+
+  it('fails instead of reporting success when both drafts are unchanged', async () => {
+    const currentYaml = 'version: 1\nrepo: acme/billing\nrules: []\n';
+    const generateStructured = vi.fn().mockResolvedValue(generated(currentYaml));
+
+    await expect(
+      draftRules(
+        { generateStructured },
+        {
+          repo: 'acme/billing',
+          description: 'Require tests.',
+          currentYaml,
+        },
+      ),
+    ).rejects.toThrow(
+      'The model returned the existing rules unchanged after one repair',
+    );
+    expect(generateStructured).toHaveBeenCalledTimes(2);
+  });
+
   it('repairs invalid YAML once and applies changes to current YAML', async () => {
     const valid = templateFor('acme/billing');
     const generateStructured = vi
