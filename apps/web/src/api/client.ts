@@ -23,6 +23,7 @@ import type {
   ReviewListQuery,
   RulesDocument,
   SettingsUpdate,
+  DraftRulesResponse,
 } from './types';
 
 export class ApiError extends Error {
@@ -133,6 +134,10 @@ export const api = {
       '/projects/validate',
       { body: { yaml } },
     ),
+  draftRules: (repo: string, description: string, currentYaml?: string) =>
+    request<DraftRulesResponse>('POST', '/projects/draft-rules', {
+      body: { repo, description, ...(currentYaml ? { currentYaml } : {}) },
+    }),
   projectTemplate: (repo: string) =>
     request<{ yaml: string }>('GET', '/projects/template', { query: { repo } }),
 

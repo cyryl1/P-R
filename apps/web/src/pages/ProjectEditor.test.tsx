@@ -108,4 +108,23 @@ describe('ProjectEditor', () => {
       'max_changed_lines',
     );
   });
+
+  it('writes rules from a plain-English description without saving', async () => {
+    const user = userEvent.setup();
+    renderApp('/projects/acme/payments-api');
+    await screen.findByText('The rules file is valid.');
+    const box = screen.getByRole('textbox', {
+      name: 'Describe your rules in plain English',
+    });
+    const button = screen.getByRole('button', { name: 'Write the rules' });
+    expect(button).toBeDisabled();
+    await user.type(box, 'Flag missing tests');
+    await user.click(button);
+    expect(
+      await screen.findByText(
+        'Rules written. Read them over, then press Save.',
+      ),
+    ).toBeInTheDocument();
+    expect(box).toHaveValue('');
+  });
 });

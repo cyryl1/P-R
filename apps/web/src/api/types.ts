@@ -29,3 +29,10 @@ export type ActivityPage = {
   pageParams: unknown[];
 };
 export type PollStatus = Extract<ServerEvent, { type: 'poll.status' }>['data'];
+
+/** Proposed in docs/CONTRACT_CHANGES.md; move to the shared contract once applied. */
+export type DraftRulesResponse = {
+  yaml: string;
+  valid: boolean;
+  errors: RulesDocument['errors'];
+};

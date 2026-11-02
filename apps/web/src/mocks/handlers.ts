@@ -98,6 +98,17 @@ export const handlers: HttpHandler[] = [
       );
     }),
   ),
+  http.post(
+    '/api/projects/draft-rules',
+    route(async ({ request }) => {
+      const { repo } = (await request.json()) as { repo: string };
+      return HttpResponse.json({
+        yaml: f.validYaml.replace('acme/payments-api', repo),
+        valid: true,
+        errors: [],
+      });
+    }),
+  ),
   http.get(
     '/api/projects/template',
     route(({ request }) => {
