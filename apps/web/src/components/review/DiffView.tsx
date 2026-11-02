@@ -189,7 +189,7 @@ export function DiffView({
                                 </button>
                               ) : null}
                             </td>
-                            <td className="whitespace-pre px-2">
+                            <td className="whitespace-pre-wrap break-all px-2">
                               {marker[line.kind]}
                               {line.text}
                             </td>
