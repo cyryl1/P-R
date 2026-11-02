@@ -1,12 +1,24 @@
 import type { FastifyInstance } from 'fastify';
 import { ApiErrorSchema, ApiSchemas, ProjectSummarySchema, RulesDocumentSchema } from '@pr-reviewer/shared';
 import type { DataPaths } from '../config/index.js';
+import type { ReviewProvider } from '../llm/provider.js';
+import { LlmNotConfiguredError, LlmProviderError } from '../llm/provider.js';
+import { draftRules } from '../rules/draft.js';
 import { deleteRules, getRules, listRules, saveRules, templateFor, validateRulesYaml } from '../rules/index.js';
 
 const errorResponse = (code: 'NO_RULES' | 'RULES_INVALID' | 'VALIDATION_ERROR', message: string, details?: unknown) =>
   ApiErrorSchema.parse({ error: { code, message, ...(details === undefined ? {} : { details }) } });
 
-export function registerProjectRoutes(app: FastifyInstance, paths: DataPaths) {
+const draftRulesErrorResponse = (
+  code: 'LLM_NOT_CONFIGURED' | 'LLM_FAILED',
+  message: string,
+) => ApiSchemas.projects.draftRulesError.parse({ error: { code, message } });
+
+export function registerProjectRoutes(
+  app: FastifyInstance,
+  paths: DataPaths,
+  getProvider: () => ReviewProvider,
+) {
   app.get('/api/projects', async (_request, reply) => {
     const projects = await listRules(paths);
     return reply.send(projects.map((project) => ProjectSummarySchema.parse(project)));
@@ -22,6 +34,35 @@ export function registerProjectRoutes(app: FastifyInstance, paths: DataPaths) {
     const body = ApiSchemas.projects.validate.safeParse(request.body);
     if (!body.success) return reply.code(400).send(errorResponse('VALIDATION_ERROR', 'Expected a yaml string'));
     return reply.send(ApiSchemas.projects.validateResponse.parse(validateRulesYaml(body.data.yaml)));
+  });
+
+  app.post('/api/projects/draft-rules', async (request, reply) => {
+    const body = ApiSchemas.projects.draftRules.safeParse(request.body);
+    if (!body.success)
+      return reply
+        .code(400)
+        .send(errorResponse('VALIDATION_ERROR', 'Invalid rules description'));
+    try {
+      const result = await draftRules(getProvider(), {
+        repo: body.data.repo,
+        description: body.data.description,
+        ...(body.data.currentYaml !== undefined
+          ? { currentYaml: body.data.currentYaml }
+          : {}),
+      });
+      return reply.send(ApiSchemas.projects.draftRulesResponse.parse(result));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'LLM failed';
+      if (error instanceof LlmNotConfiguredError)
+        return reply
+          .code(503)
+          .send(draftRulesErrorResponse('LLM_NOT_CONFIGURED', message));
+      if (error instanceof LlmProviderError)
+        return reply
+          .code(502)
+          .send(draftRulesErrorResponse('LLM_FAILED', message));
+      throw error;
+    }
   });
 
   app.get<{ Params: { owner: string; repo: string } }>('/api/projects/:owner/:repo', async (request, reply) => {

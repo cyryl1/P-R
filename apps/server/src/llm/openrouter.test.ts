@@ -205,6 +205,34 @@ describe('OpenRouterProvider', () => {
     ).rejects.toBeInstanceOf(LlmProviderError);
     expect(fetch).toHaveBeenCalledTimes(2);
   });
+
+  it('supports reusable strict structured generation', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+      openRouterResponse({ yaml: 'version: 1' }),
+    );
+    const provider = new OpenRouterProvider({ apiKey: 'test-key', fetch });
+
+    await expect(
+      provider.generateStructured({
+        system: 'Draft rules.',
+        prompt: 'For acme/billing.',
+        schemaName: 'draft_rules',
+        schema: {
+          type: 'object',
+          properties: { yaml: { type: 'string' } },
+          required: ['yaml'],
+          additionalProperties: false,
+        },
+      }),
+    ).resolves.toMatchObject({
+      content: JSON.stringify({ yaml: 'version: 1' }),
+      meta: { provider: 'openrouter' },
+    });
+    const request = JSON.parse(String(fetch.mock.calls[0]?.[1]?.body)) as {
+      response_format: { json_schema: { name: string } };
+    };
+    expect(request.response_format.json_schema.name).toBe('draft_rules');
+  });
 });
 
 describe('createReviewProvider', () => {

@@ -33,3 +33,9 @@ The server asks the configured LLM to turn the description into a rules file, va
 
 1. Added `ignored: z.boolean().optional()` to `DiffFileSchema`. The backend sets it to `true` when a changed path matches the repository rules file's `review.ignore_paths`; included files omit the field.
 2. `GET /api/reviews/:id/diff` now preserves that marker while still returning the ignored file's hunks for display. Ignored files remain excluded from the LLM prompt.
+
+### Plain-English rules — 2026-11-02
+
+1. Added `POST /api/projects/draft-rules` with body `{repo, description, currentYaml?}` and response `{yaml, valid, errors}`.
+2. The endpoint uses the configured provider to create or revise a rules file, validates it against the existing rules schema, and makes one repair attempt. It returns the draft without saving it.
+3. Added endpoint-specific `LLM_NOT_CONFIGURED` and `LLM_FAILED` error responses. Missing provider credentials return `LLM_NOT_CONFIGURED`; provider and structured-output failures return `LLM_FAILED`.

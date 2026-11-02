@@ -1,5 +1,10 @@
 import type { ReviewOutput } from '@pr-reviewer/shared';
-import type { ProviderReviewResult, ReviewProvider } from './provider.js';
+import type {
+  ProviderGenerationResult,
+  ProviderReviewResult,
+  ReviewProvider,
+  StructuredGenerationInput,
+} from './provider.js';
 
 export class MockProvider implements ReviewProvider {
   readonly name = 'mock';
@@ -28,6 +33,21 @@ export class MockProvider implements ReviewProvider {
           };
     return {
       output,
+      meta: {
+        provider: this.name,
+        model: this.model,
+        inputTokens: 0,
+        outputTokens: 0,
+        durationMs: 0,
+      },
+    };
+  }
+
+  async generateStructured(
+    input: StructuredGenerationInput,
+  ): Promise<ProviderGenerationResult> {
+    return {
+      content: input.mockContent ?? '{}',
       meta: {
         provider: this.name,
         model: this.model,
