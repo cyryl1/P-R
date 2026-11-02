@@ -112,6 +112,7 @@ export const YamlEditor = forwardRef<YamlEditorHandle, Props>(
               if (update.docChanged)
                 onChangeRef.current(update.state.doc.toString());
             }),
+            EditorView.lineWrapping,
             EditorView.contentAttributes.of({ 'aria-label': 'Rules YAML' }),
           ],
         }),
@@ -122,7 +123,7 @@ export const YamlEditor = forwardRef<YamlEditorHandle, Props>(
         view.current = null;
       };
       // The editor is created once; later value changes are synced below.
-      }, []);
+    }, []);
 
     // Sync external value changes (e.g. loading a template or saved text).
     useEffect(() => {
