@@ -281,6 +281,17 @@ export const ApiSchemas = {
         message: z.string(),
       }),
     }),
+    githubComment: z.object({
+      body: z.string().trim().min(1).max(65_536),
+      confirm: z.literal(true),
+    }),
+    githubCommentResponse: z.object({
+      id: z.string(),
+      url: z.string().url(),
+      body: z.string(),
+      author: z.string(),
+      createdAt: z.string(),
+    }),
     addComment: z.object({
       path: z.string(),
       line: z.number().int().positive(),

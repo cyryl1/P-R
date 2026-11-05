@@ -79,6 +79,13 @@ rules:
         html_url: 'https://github.com/acme/billing/pull/7#pullrequestreview-99',
       };
     },
+    createIssueComment: async (_repo, _number, body) => ({
+      id: '1',
+      url: 'https://github.com/acme/billing/pull/7#issuecomment-1',
+      body,
+      author: 'octo',
+      createdAt: '2026-11-05T12:00:00Z',
+    }),
     submitReview: async () => ({ id: 99, state: 'COMMENTED' }),
     deletePendingReview,
   };

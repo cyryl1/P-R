@@ -612,6 +612,15 @@ export class ReviewDatabase {
     if (this.database.getRowsModified() > 0) await this.persist();
   }
 
+  async incrementGithubCommentCount(reviewId: string): Promise<void> {
+    this.database.run(
+      `UPDATE prs SET github_comments=github_comments + 1
+       WHERE id=(SELECT pr_id FROM reviews WHERE id=?)`,
+      [reviewId],
+    );
+    if (this.database.getRowsModified() > 0) await this.persist();
+  }
+
   getLatestReviewForPr(
     repo: string,
     number: number,

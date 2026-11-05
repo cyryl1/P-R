@@ -77,7 +77,17 @@ describe('GitHub CLI wrapper', () => {
   });
 
   it('sends review payloads through stdin', async () => {
-    const run = vi.fn<GhRun>(async () => '{}');
+    const run = vi.fn<GhRun>(async (args) =>
+      args[1]?.includes('/issues/')
+        ? JSON.stringify({
+            id: 88,
+            html_url: 'https://github.com/acme/billing/pull/42#issuecomment-88',
+            body: 'Looks good to me.',
+            user: { login: 'octocat' },
+            created_at: '2026-11-05T12:00:00Z',
+          })
+        : '{}',
+    );
     const gh = createGhClient(run);
     await gh.createReview('acme/billing', 42, {
       commit_id: 'deadbeef',
@@ -91,6 +101,15 @@ describe('GitHub CLI wrapper', () => {
       'REQUEST_CHANGES',
       'Review body',
     );
+    await expect(
+      gh.createIssueComment('acme/billing', 42, 'Looks good to me.'),
+    ).resolves.toEqual({
+      id: '88',
+      url: 'https://github.com/acme/billing/pull/42#issuecomment-88',
+      body: 'Looks good to me.',
+      author: 'octocat',
+      createdAt: '2026-11-05T12:00:00Z',
+    });
     await gh.deletePendingReview('acme/billing', 42, 7);
     expect(run.mock.calls[0]?.[0]).toEqual([
       'api',
@@ -110,7 +129,18 @@ describe('GitHub CLI wrapper', () => {
     expect(run.mock.calls[1]?.[1]).toEqual({
       input: JSON.stringify({ event: 'REQUEST_CHANGES', body: 'Review body' }),
     });
-    expect(run.mock.calls[2]?.[0]).toEqual([
+    expect(run.mock.calls[2]).toEqual([
+      [
+        'api',
+        'repos/acme/billing/issues/42/comments',
+        '-X',
+        'POST',
+        '--input',
+        '-',
+      ],
+      { input: JSON.stringify({ body: 'Looks good to me.' }) },
+    ]);
+    expect(run.mock.calls[3]?.[0]).toEqual([
       'api',
       'repos/acme/billing/pulls/42/reviews/7',
       '-X',
