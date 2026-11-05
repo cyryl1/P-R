@@ -12,6 +12,14 @@ Writing the rules YAML by hand is too technical. The Rules editor will get a "De
 
 The server asks the configured LLM to turn the description into a rules file, validates it with the existing rules schema (one repair attempt on failure), and returns the YAML. It never saves. The UI shows the result in the editor for the user to review and save. When `currentYaml` is given, the description is applied as a change to it. Errors: `LLM_NOT_CONFIGURED`, `LLM_FAILED`.
 
+### Codex-style PR page data (requested by Claude Code)
+
+The review page is being reshaped like a PR review app (PR list sidebar, status panel, ask-about-PR bar). Three pieces need backend data, so the UI leaves them out until they exist.
+
+1. **Sidebar groups.** Add `relation: 'review_requested' | 'authored' | 'team_review_requested'` to `InboxItem` (and have the poller also search `--author=@me` and `--review-requested=<team>`). The sidebar then shows "Authored by me", "Needs my review" and "Needs my team's review".
+2. **Merge status and checks.** Add to `ReviewDetail.pr`: `mergeable: 'mergeable' | 'conflicting' | 'unknown'`, `checks: [{name, state: 'pending'|'success'|'failure', url?}]`, and `githubComments: number`, `githubReviews: [{author, state}]`.
+3. **Ask about this PR.** `POST /api/reviews/:id/ask`, body `{question: string}`, response `{answer: string}`. The server answers from the PR, diff and rules using the configured LLM; nothing is saved or posted to GitHub. Errors: `LLM_NOT_CONFIGURED`, `LLM_FAILED`.
+
 ## Applied changes
 
 ### Phase 1 — 2026-10-25
@@ -39,3 +47,9 @@ The server asks the configured LLM to turn the description into a rules file, va
 1. Added `POST /api/projects/draft-rules` with body `{repo, description, currentYaml?}` and response `{yaml, valid, errors}`.
 2. The endpoint uses the configured provider to create or revise a rules file, validates it against the existing rules schema, and makes one repair attempt. It returns the draft without saving it.
 3. Added endpoint-specific `LLM_NOT_CONFIGURED` and `LLM_FAILED` error responses. Missing provider credentials return `LLM_NOT_CONFIGURED`; provider and structured-output failures return `LLM_FAILED`.
+
+### Codex-style PR page data — 2026-11-05
+
+1. Added backward-compatible `relation` data to inbox items and persisted PRs. Inbox and poll refreshes now combine direct review requests, authored PRs, and team review requests; team requests are identified from the broad review-requested result after direct requests are removed. The server always supplies the field, while the contract keeps it optional so the backend can merge before the corresponding UI update.
+2. Added backward-compatible normalized mergeability, check status, GitHub comment count, and GitHub review author/state data to `ReviewDetail.pr`. Existing databases add the required PR columns on startup. The server always supplies these fields, while the contract keeps them optional for the independent UI rollout.
+3. Added `POST /api/reviews/:id/ask` with `{question}` and `{answer}` schemas plus endpoint-specific `LLM_NOT_CONFIGURED` and `LLM_FAILED` errors. It uses the configured provider with the saved valid rules snapshot and stored diff, treats all PR content as untrusted, and neither saves nor posts the answer.

@@ -14,19 +14,52 @@ export class InboxService {
   async list(): Promise<InboxItem[]> {
     let prs = this.database.listInboxPrs();
     if (prs.length === 0) {
-      const requested = await this.gh.searchReviewRequests({ teams: false });
+      const [requested, authored, allRequested] = await Promise.all([
+        this.gh.searchReviewRequests({ teams: false }),
+        this.gh.searchAuthoredPullRequests?.() ?? Promise.resolve([]),
+        this.gh.searchReviewRequests({ teams: true }),
+      ]);
+      const direct = new Set(
+        requested.map(
+          (item) => `${item.repository.nameWithOwner}#${item.number}`,
+        ),
+      );
+      const discovered = new Map<
+        string,
+        {
+          result: (typeof requested)[number];
+          relation: InboxItem['relation'];
+        }
+      >();
+      for (const result of authored)
+        discovered.set(`${result.repository.nameWithOwner}#${result.number}`, {
+          result,
+          relation: 'authored',
+        });
+      for (const result of allRequested) {
+        const key = `${result.repository.nameWithOwner}#${result.number}`;
+        if (!direct.has(key))
+          discovered.set(key, { result, relation: 'team_review_requested' });
+      }
+      for (const result of requested)
+        discovered.set(`${result.repository.nameWithOwner}#${result.number}`, {
+          result,
+          relation: 'review_requested',
+        });
       const hydrated = await Promise.all(
-        requested.map(async (result) => ({
+        [...discovered.values()].map(async ({ result, relation }) => ({
           repo: result.repository.nameWithOwner,
           pr: await this.gh.getPr(
             result.repository.nameWithOwner,
             result.number,
           ),
+          relation,
         })),
       );
       for (const item of hydrated)
         await this.database.upsertPr(item.repo, item.pr, {
-          reviewRequested: true,
+          reviewRequested: item.relation !== 'authored',
+          relation: item.relation,
         });
       prs = this.database.listInboxPrs();
     }
@@ -49,6 +82,7 @@ export class InboxService {
             isDraft: pr.isDraft,
             updatedAt: pr.updatedAt,
           },
+          relation: pr.relation,
           rulesState,
           ...(latestReview ? { latestReview } : {}),
           isStale: Boolean(latestReview && latestReview.headSha !== pr.headSha),

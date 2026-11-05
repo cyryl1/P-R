@@ -62,6 +62,20 @@ export const ReviewDetailSchema = ReviewSummarySchema.extend({
     headRef: z.string(),
     additions: z.number().int().nonnegative(),
     deletions: z.number().int().nonnegative(),
+    mergeable: z.enum(['mergeable', 'conflicting', 'unknown']).optional(),
+    checks: z
+      .array(
+        z.object({
+          name: z.string(),
+          state: z.enum(['pending', 'success', 'failure']),
+          url: z.string().url().optional(),
+        }),
+      )
+      .optional(),
+    githubComments: z.number().int().nonnegative().optional(),
+    githubReviews: z
+      .array(z.object({ author: z.string(), state: z.string() }))
+      .optional(),
   }),
   summary: z.string(),
   verdict: VerdictSchema,
@@ -96,6 +110,9 @@ export const InboxItemSchema = z.object({
     isDraft: z.boolean(),
     updatedAt: z.string(),
   }),
+  relation: z
+    .enum(['review_requested', 'authored', 'team_review_requested'])
+    .optional(),
   rulesState: z.enum(['none', 'invalid', 'disabled', 'ok']),
   latestReview: ReviewSummarySchema.optional(),
   isStale: z.boolean(),
@@ -256,6 +273,14 @@ export const ApiSchemas = {
       verdict: VerdictSchema.optional(),
     }),
     diff: z.array(DiffFileSchema),
+    ask: z.object({ question: z.string().trim().min(1).max(4_000) }),
+    askResponse: z.object({ answer: z.string().min(1) }),
+    askError: z.object({
+      error: z.object({
+        code: z.enum(['LLM_NOT_CONFIGURED', 'LLM_FAILED']),
+        message: z.string(),
+      }),
+    }),
     addComment: z.object({
       path: z.string(),
       line: z.number().int().positive(),

@@ -3,6 +3,7 @@ import type { DataPaths } from '../config/index.js';
 import { ReviewDatabase } from '../db/index.js';
 import { EventHub } from '../events/index.js';
 import type { GhClient, GhPr } from '../gh/client.js';
+import type { InboxItem } from '@pr-reviewer/shared';
 import type { ReviewService } from '../review/index.js';
 import { getRules, hasRules } from '../rules/index.js';
 
@@ -13,7 +14,11 @@ export type PollStatus = {
   lastError?: string;
 };
 
-type HydratedRequest = { repo: string; pr: GhPr };
+type HydratedRequest = {
+  repo: string;
+  pr: GhPr;
+  relation: InboxItem['relation'];
+};
 
 export class Poller {
   private config: AppConfig;
@@ -92,22 +97,59 @@ export class Poller {
     };
     this.emitStatus();
     try {
-      const results = await this.gh.searchReviewRequests({
-        teams: this.config.poller.include_team_requests,
-      });
+      const [direct, authored, allRequested] = await Promise.all([
+        this.gh.searchReviewRequests({ teams: false }),
+        this.gh.searchAuthoredPullRequests?.() ?? Promise.resolve([]),
+        this.config.poller.include_team_requests
+          ? this.gh.searchReviewRequests({ teams: true })
+          : Promise.resolve([]),
+      ]);
+      const directKeys = new Set(
+        direct.map((item) => `${item.repository.nameWithOwner}#${item.number}`),
+      );
+      const discovered = new Map<
+        string,
+        {
+          search: (typeof direct)[number];
+          relation: InboxItem['relation'];
+        }
+      >();
+      for (const search of authored)
+        discovered.set(`${search.repository.nameWithOwner}#${search.number}`, {
+          search,
+          relation: 'authored',
+        });
+      for (const search of allRequested) {
+        const key = `${search.repository.nameWithOwner}#${search.number}`;
+        if (!directKeys.has(key))
+          discovered.set(key, { search, relation: 'team_review_requested' });
+      }
+      for (const search of direct)
+        discovered.set(`${search.repository.nameWithOwner}#${search.number}`, {
+          search,
+          relation: 'review_requested',
+        });
       const hydrated = await Promise.all(
-        results.map(async (search): Promise<HydratedRequest> => {
-          const repo = search.repository.nameWithOwner;
-          return { repo, pr: await this.gh.getPr(repo, search.number) };
-        }),
+        [...discovered.values()].map(
+          async ({ search, relation }): Promise<HydratedRequest> => {
+            const repo = search.repository.nameWithOwner;
+            return {
+              repo,
+              pr: await this.gh.getPr(repo, search.number),
+              relation,
+            };
+          },
+        ),
       );
       await this.detectSubmittedReviews();
-      await this.database.clearReviewRequests();
+      await this.database.clearInboxRelations();
       for (const item of hydrated)
         await this.database.upsertPr(item.repo, item.pr, {
-          reviewRequested: true,
+          reviewRequested: item.relation !== 'authored',
+          relation: item.relation,
         });
-      for (const item of hydrated) await this.applyTrigger(item);
+      for (const item of hydrated)
+        if (item.relation !== 'authored') await this.applyTrigger(item);
 
       const lastRunAt = new Date().toISOString();
       this.status = { state: 'idle', lastRunAt };

@@ -31,6 +31,14 @@ export type GhPr = {
   }>;
   closingIssuesReferences: Array<{ number: number; url: string }>;
   state: string;
+  mergeable?: 'mergeable' | 'conflicting' | 'unknown';
+  checks?: Array<{
+    name: string;
+    state: 'pending' | 'success' | 'failure';
+    url?: string;
+  }>;
+  githubComments?: number;
+  githubReviews?: Array<{ author: string; state: string }>;
 };
 export type GhReview = {
   id: number;
@@ -57,6 +65,7 @@ export interface GhClient {
   searchReviewRequests(options?: {
     teams?: boolean;
   }): Promise<GhSearchResult[]>;
+  searchAuthoredPullRequests?(): Promise<GhSearchResult[]>;
   getPr(repo: string, number: number): Promise<GhPr>;
   getDiff(repo: string, number: number): Promise<string>;
   getFile(repo: string, path: string, ref: string): Promise<string>;
@@ -99,6 +108,38 @@ export const runGh: GhRun = async (args, options = {}) => {
 };
 
 const parseJson = <T>(raw: string): T => JSON.parse(raw) as T;
+type RawGhPr = Omit<
+  GhPr,
+  'mergeable' | 'checks' | 'githubComments' | 'githubReviews'
+> & {
+  mergeable?: string;
+  comments?: unknown[];
+  reviews?: Array<{
+    author?: { login?: string } | null;
+    state?: string;
+  }>;
+  statusCheckRollup?: Array<{
+    name?: string;
+    context?: string;
+    status?: string;
+    state?: string;
+    conclusion?: string | null;
+    detailsUrl?: string | null;
+    targetUrl?: string | null;
+  }>;
+};
+
+const checkState = (
+  check: NonNullable<RawGhPr['statusCheckRollup']>[number],
+): 'pending' | 'success' | 'failure' => {
+  const status = (check.status ?? check.state ?? '').toUpperCase();
+  if (['QUEUED', 'PENDING', 'EXPECTED', 'IN_PROGRESS'].includes(status))
+    return 'pending';
+  const conclusion = (check.conclusion ?? check.state ?? '').toUpperCase();
+  return ['SUCCESS', 'NEUTRAL', 'SKIPPED'].includes(conclusion)
+    ? 'success'
+    : 'failure';
+};
 const repoArg = (repo: string): string => {
   if (!/^[^/\s]+\/[^/\s]+$/.test(repo))
     throw new Error(`Invalid repository: ${repo}`);
@@ -130,6 +171,19 @@ export function createGhClient(run: GhRun = runGh): GhClient {
       ]);
       return parseJson<GhSearchResult[]>(raw);
     },
+    async searchAuthoredPullRequests() {
+      const raw = await run([
+        'search',
+        'prs',
+        '--author=@me',
+        '--state=open',
+        '--json',
+        'number,title,repository,url,author,isDraft,updatedAt',
+        '--limit',
+        '100',
+      ]);
+      return parseJson<GhSearchResult[]>(raw);
+    },
     async getPr(repo, number) {
       const raw = await run([
         'pr',
@@ -138,9 +192,30 @@ export function createGhClient(run: GhRun = runGh): GhClient {
         '-R',
         repoArg(repo),
         '--json',
-        'number,title,body,author,url,baseRefName,headRefName,headRefOid,isDraft,additions,deletions,files,closingIssuesReferences,state',
+        'number,title,body,author,url,baseRefName,headRefName,headRefOid,isDraft,additions,deletions,files,closingIssuesReferences,state,mergeable,statusCheckRollup,comments,reviews',
       ]);
-      return parseJson<GhPr>(raw);
+      const value = parseJson<RawGhPr>(raw);
+      return {
+        ...value,
+        mergeable:
+          value.mergeable === 'MERGEABLE'
+            ? 'mergeable'
+            : value.mergeable === 'CONFLICTING'
+              ? 'conflicting'
+              : 'unknown',
+        checks: (value.statusCheckRollup ?? []).map((check) => ({
+          name: check.name ?? check.context ?? 'Unnamed check',
+          state: checkState(check),
+          ...(check.detailsUrl || check.targetUrl
+            ? { url: (check.detailsUrl ?? check.targetUrl)! }
+            : {}),
+        })),
+        githubComments: value.comments?.length ?? 0,
+        githubReviews: (value.reviews ?? []).map((review) => ({
+          author: review.author?.login ?? 'unknown',
+          state: review.state ?? 'UNKNOWN',
+        })),
+      };
     },
     getDiff: (repo, number) =>
       run(['pr', 'diff', String(number), '-R', repoArg(repo)]),

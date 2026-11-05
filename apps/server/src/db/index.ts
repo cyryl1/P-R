@@ -9,6 +9,7 @@ import {
   ReviewDetailSchema,
   ReviewSummarySchema,
   type ReviewComment,
+  type InboxItem,
   type ActivityEntry,
   type ReviewDetail,
   type ReviewStatus,
@@ -50,6 +51,7 @@ export type InboxPr = {
   headSha: string;
   isDraft: boolean;
   updatedAt: string;
+  relation: InboxItem['relation'];
 };
 export type ReviewJob = {
   id: string;
@@ -78,6 +80,11 @@ CREATE TABLE IF NOT EXISTS prs (
   additions INTEGER NOT NULL,
   deletions INTEGER NOT NULL,
   review_requested INTEGER NOT NULL DEFAULT 0,
+  relation TEXT,
+  mergeable TEXT NOT NULL DEFAULT 'unknown',
+  checks_json TEXT NOT NULL DEFAULT '[]',
+  github_comments INTEGER NOT NULL DEFAULT 0,
+  github_reviews_json TEXT NOT NULL DEFAULT '[]',
   first_seen_at TEXT NOT NULL,
   last_seen_at TEXT NOT NULL,
   UNIQUE(repo, number)
@@ -173,6 +180,7 @@ export class ReviewDatabase {
     }
     const store = new ReviewDatabase(new SQL.Database(bytes), path);
     store.database.run(migrations);
+    store.ensurePrColumns();
     await store.persist();
     return store;
   }
@@ -183,6 +191,22 @@ export class ReviewDatabase {
 
   setEventSink(sink: ((event: ServerEvent) => void) | undefined) {
     this.eventSink = sink;
+  }
+
+  private ensurePrColumns() {
+    const columns = new Set(
+      this.all('PRAGMA table_info(prs)').map((row) => asString(row.name)),
+    );
+    const additions: Array<[string, string]> = [
+      ['relation', 'TEXT'],
+      ['mergeable', "TEXT NOT NULL DEFAULT 'unknown'"],
+      ['checks_json', "TEXT NOT NULL DEFAULT '[]'"],
+      ['github_comments', 'INTEGER NOT NULL DEFAULT 0'],
+      ['github_reviews_json', "TEXT NOT NULL DEFAULT '[]'"],
+    ];
+    for (const [name, definition] of additions)
+      if (!columns.has(name))
+        this.database.run(`ALTER TABLE prs ADD COLUMN ${name} ${definition}`);
   }
 
   async recoverInterruptedReviews(): Promise<number> {
@@ -234,20 +258,28 @@ export class ReviewDatabase {
   async upsertPr(
     repo: string,
     pr: GhPr,
-    options: { reviewRequested?: boolean } = {},
+    options: {
+      reviewRequested?: boolean;
+      relation?: InboxItem['relation'] | null;
+    } = {},
   ): Promise<number> {
     const now = new Date().toISOString();
     this.database.run(
       `INSERT INTO prs
        (repo, number, title, body, author, url, head_sha, base_ref, head_ref,
-        is_draft, additions, deletions, review_requested, first_seen_at, last_seen_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        is_draft, additions, deletions, review_requested, relation, mergeable,
+        checks_json, github_comments, github_reviews_json, first_seen_at, last_seen_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(repo, number) DO UPDATE SET
          title=excluded.title, body=excluded.body, author=excluded.author,
          url=excluded.url, head_sha=excluded.head_sha, base_ref=excluded.base_ref,
          head_ref=excluded.head_ref, is_draft=excluded.is_draft,
          additions=excluded.additions, deletions=excluded.deletions,
          review_requested=CASE WHEN ? IS NULL THEN prs.review_requested ELSE excluded.review_requested END,
+         relation=CASE WHEN ? IS NULL THEN prs.relation ELSE excluded.relation END,
+         mergeable=excluded.mergeable, checks_json=excluded.checks_json,
+         github_comments=excluded.github_comments,
+         github_reviews_json=excluded.github_reviews_json,
          last_seen_at=excluded.last_seen_at`,
       [
         repo,
@@ -267,9 +299,15 @@ export class ReviewDatabase {
           : options.reviewRequested
             ? 1
             : 0,
+        options.relation ?? null,
+        pr.mergeable ?? 'unknown',
+        JSON.stringify(pr.checks ?? []),
+        pr.githubComments ?? 0,
+        JSON.stringify(pr.githubReviews ?? []),
         now,
         now,
         options.reviewRequested === undefined ? null : 1,
+        options.relation === undefined ? null : 1,
       ],
     );
     await this.persist();
@@ -450,6 +488,13 @@ export class ReviewDatabase {
       : undefined;
   }
 
+  getRulesSnapshot(id: string): RulesFile | undefined {
+    const row = this.one('SELECT rules_snapshot FROM reviews WHERE id=?', [id]);
+    return row
+      ? (JSON.parse(asString(row.rules_snapshot)) as RulesFile)
+      : undefined;
+  }
+
   getSummary(id: string): ReviewSummary | undefined {
     const row = this.reviewRows('WHERE r.id=?', [id])[0];
     return row ? this.toSummary(row) : undefined;
@@ -474,6 +519,10 @@ export class ReviewDatabase {
         headRef: asString(row.head_ref),
         additions: Number(row.additions),
         deletions: Number(row.deletions),
+        mergeable: asString(row.mergeable),
+        checks: JSON.parse(asString(row.checks_json)),
+        githubComments: Number(row.github_comments),
+        githubReviews: JSON.parse(asString(row.github_reviews_json)),
       },
       summary: asString(row.summary),
       verdict: asString(row.verdict),
@@ -530,8 +579,10 @@ export class ReviewDatabase {
 
   listInboxPrs(): InboxPr[] {
     return this.all(
-      `SELECT id, repo, number, title, author, url, head_sha, is_draft, last_seen_at
-       FROM prs WHERE review_requested=1 ORDER BY last_seen_at DESC`,
+      `SELECT id, repo, number, title, author, url, head_sha, is_draft,
+              last_seen_at, relation, review_requested
+       FROM prs WHERE relation IS NOT NULL OR review_requested=1
+       ORDER BY last_seen_at DESC`,
     ).map((row) => ({
       id: Number(row.id),
       repo: asString(row.repo),
@@ -542,7 +593,16 @@ export class ReviewDatabase {
       headSha: asString(row.head_sha),
       isDraft: Boolean(row.is_draft),
       updatedAt: asString(row.last_seen_at),
+      relation: (optionalString(row.relation) ??
+        'review_requested') as InboxItem['relation'],
     }));
+  }
+
+  async clearInboxRelations(): Promise<void> {
+    this.database.run(
+      'UPDATE prs SET relation=NULL, review_requested=0 WHERE relation IS NOT NULL OR review_requested=1',
+    );
+    if (this.database.getRowsModified() > 0) await this.persist();
   }
 
   async clearReviewRequests(): Promise<void> {
@@ -784,6 +844,8 @@ export class ReviewDatabase {
     return this.all(
       `SELECT r.*, p.repo, p.number, p.title, p.body, p.author, p.url,
               p.base_ref, p.head_ref, p.additions, p.deletions,
+              p.mergeable, p.checks_json, p.github_comments,
+              p.github_reviews_json,
               (SELECT COUNT(*) FROM review_comments c WHERE c.review_id=r.id) comment_count,
               (SELECT COUNT(*) FROM review_comments c WHERE c.review_id=r.id AND c.severity='blocker') blocker_count
        FROM reviews r JOIN prs p ON p.id=r.pr_id ${suffix}`,
