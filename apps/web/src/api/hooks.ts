@@ -54,6 +54,7 @@ export const useReview = (id: string) =>
   useQuery({
     queryKey: keys.review(id),
     queryFn: () => api.review(id),
+    enabled: !!id,
     refetchInterval: (query) =>
       IN_PROGRESS.includes(query.state.data?.status ?? '') ? 5_000 : false,
   });

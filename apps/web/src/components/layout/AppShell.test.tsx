@@ -39,9 +39,12 @@ describe('AppShell', () => {
     expect(await within(side).findByText('Add refund endpoint')).toBeVisible();
     expect(within(side).getByText('Needs my review')).toBeInTheDocument();
     expect(within(side).getByText('Authored by me')).toBeInTheDocument();
-    expect(
-      within(side).getByText("Needs my team's review"),
-    ).toBeInTheDocument();
+    expect(within(side).getByLabelText('Project')).toHaveValue(
+      'acme/payments-api',
+    );
+    // Other projects' PRs are not listed here.
+    expect(within(side).queryByText("Needs my team's review")).toBeNull();
+    expect(within(side).queryByText('Redesign settings page')).toBeNull();
     expect(
       within(side).getByRole('link', { name: /Add refund endpoint/ }),
     ).toHaveAttribute('href', '/reviews/rev_draft_ready');
@@ -51,6 +54,26 @@ describe('AppShell', () => {
     );
     expect(within(side).queryByText('Add refund endpoint')).toBeNull();
     expect(within(side).getByText('WIP: webhooks')).toBeInTheDocument();
+  });
+
+  it('switches project from the sidebar and lists only that project', async () => {
+    const user = userEvent.setup();
+    renderApp('/reviews/rev_draft_ready');
+    const side = await screen.findByRole('complementary', {
+      name: 'Pull requests',
+    });
+    await within(side).findByText('Add refund endpoint');
+    await user.selectOptions(
+      within(side).getByLabelText('Project'),
+      'acme/legacy',
+    );
+    expect(await within(side).findByText('Remove dead code')).toBeVisible();
+    expect(
+      within(side).getByText("Needs my team's review"),
+    ).toBeInTheDocument();
+    expect(within(side).queryByText('Add refund endpoint')).toBeNull();
+    // The choice is remembered for the next visit.
+    expect(localStorage.getItem('pr-reviewer.project')).toBe('acme/legacy');
   });
 
   it('opens the newest PR that needs attention from the home route', async () => {
