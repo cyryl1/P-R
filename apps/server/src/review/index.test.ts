@@ -207,6 +207,16 @@ describe('review orchestration', () => {
         expect.objectContaining({ path: 'docs/refunds.md', ignored: true }),
       ]),
     );
+    const askResponse = await app.inject({
+      method: 'POST',
+      url: `/api/reviews/${summary.id}/ask`,
+      headers: { host: 'localhost' },
+      payload: { question: 'What changed?' },
+    });
+    expect(askResponse.statusCode).toBe(200);
+    expect(askResponse.json()).toEqual({
+      answer: 'The mock provider cannot analyze the pull request.',
+    });
     const patch = await app.inject({
       method: 'PATCH',
       url: `/api/reviews/${summary.id}`,

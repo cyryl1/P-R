@@ -61,6 +61,7 @@ describe('inbox', () => {
           headSha: 'deadbeef',
         }),
         rulesState: 'none',
+        relation: 'review_requested',
         isStale: false,
       }),
     ]);
@@ -78,6 +79,6 @@ rules: []
     await expect(inbox.list()).resolves.toEqual([
       expect.objectContaining({ rulesState: 'ok' }),
     ]);
-    expect(searchReviewRequests).toHaveBeenCalledTimes(1);
+    expect(searchReviewRequests).toHaveBeenCalledTimes(2);
   });
 });

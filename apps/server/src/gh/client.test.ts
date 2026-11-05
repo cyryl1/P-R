@@ -31,7 +31,16 @@ describe('GitHub CLI wrapper', () => {
     await expect(gh.searchReviewRequests({ teams: true })).resolves.toEqual(
       ghSearchFixture,
     );
-    await expect(gh.getPr('acme/billing', 42)).resolves.toEqual(ghPrFixture);
+    await expect(gh.getPr('acme/billing', 42)).resolves.toMatchObject({
+      ...ghPrFixture,
+      mergeable: 'unknown',
+      checks: [],
+      githubComments: 0,
+      githubReviews: [],
+    });
+    await expect(gh.searchAuthoredPullRequests!()).resolves.toEqual(
+      ghSearchFixture,
+    );
     await expect(gh.getDiff('acme/billing', 42)).resolves.toBe(
       diffCases.multiHunk,
     );
@@ -43,6 +52,16 @@ describe('GitHub CLI wrapper', () => {
       'search',
       'prs',
       'user-review-requested:@me',
+      '--state=open',
+      '--json',
+      'number,title,repository,url,author,isDraft,updatedAt',
+      '--limit',
+      '100',
+    ]);
+    expect(run).toHaveBeenCalledWith([
+      'search',
+      'prs',
+      '--author=@me',
       '--state=open',
       '--json',
       'number,title,repository,url,author,isDraft,updatedAt',

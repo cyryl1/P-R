@@ -141,4 +141,32 @@ describe('shared contract', () => {
       }).error.code,
     ).toBe('LLM_FAILED');
   });
+
+  it('validates Codex-style PR page data', () => {
+    expect(
+      ApiSchemas.inbox.response.safeParse([
+        {
+          pr: {
+            repo: 'acme/billing',
+            number: 42,
+            title: 'Fix invoices',
+            author: 'octocat',
+            url: 'https://github.com/acme/billing/pull/42',
+            headSha: 'abc123',
+            isDraft: false,
+            updatedAt: '2026-11-05T10:00:00Z',
+          },
+          relation: 'authored',
+          rulesState: 'ok',
+          isStale: false,
+        },
+      ]).success,
+    ).toBe(true);
+    expect(ApiSchemas.reviews.ask.parse({ question: 'What changed?' })).toEqual(
+      { question: 'What changed?' },
+    );
+    expect(
+      ApiSchemas.reviews.askResponse.parse({ answer: 'The API changed.' }),
+    ).toEqual({ answer: 'The API changed.' });
+  });
 });

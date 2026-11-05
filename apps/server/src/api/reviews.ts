@@ -5,7 +5,7 @@ import {
   GhNotFoundError,
   GhRateLimitError,
 } from '../gh/errors.js';
-import { LlmNotConfiguredError } from '../llm/provider.js';
+import { LlmNotConfiguredError, LlmProviderError } from '../llm/provider.js';
 import {
   HeadMovedError,
   PendingExistsError,
@@ -29,13 +29,11 @@ function sendError(reply: FastifyReply, error: unknown) {
   if (error instanceof ReviewStateError)
     return reply.code(409).send(apiError('INVALID_STATE', message));
   if (error instanceof HeadMovedError)
-    return reply
-      .code(409)
-      .send(
-        apiError('HEAD_MOVED', message, {
-          currentHeadSha: error.currentHeadSha,
-        }),
-      );
+    return reply.code(409).send(
+      apiError('HEAD_MOVED', message, {
+        currentHeadSha: error.currentHeadSha,
+      }),
+    );
   if (error instanceof PendingExistsError)
     return reply.code(409).send(
       apiError('PENDING_EXISTS', message, {
@@ -49,6 +47,12 @@ function sendError(reply: FastifyReply, error: unknown) {
     return reply.code(429).send(apiError('GH_RATE_LIMITED', message));
   if (error instanceof LlmNotConfiguredError)
     return reply.code(503).send(apiError('LLM_NOT_CONFIGURED', message));
+  if (error instanceof LlmProviderError)
+    return reply.code(502).send(
+      ApiSchemas.reviews.askError.parse({
+        error: { code: 'LLM_FAILED', message },
+      }),
+    );
   if (/rules.*invalid/i.test(message))
     return reply.code(422).send(apiError('RULES_INVALID', message));
   if (/rules.*disabled|ENOENT|no such file/i.test(message))
@@ -150,6 +154,26 @@ export function registerReviewRoutes(
                 ? { verdict: body.data.verdict }
                 : {}),
             }),
+          ),
+        );
+      } catch (error) {
+        return sendError(reply, error);
+      }
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    '/api/reviews/:id/ask',
+    async (request, reply) => {
+      const body = ApiSchemas.reviews.ask.safeParse(request.body);
+      if (!body.success)
+        return reply
+          .code(400)
+          .send(apiError('VALIDATION_ERROR', 'Invalid PR question'));
+      try {
+        return reply.send(
+          ApiSchemas.reviews.askResponse.parse(
+            await reviews.ask(request.params.id, body.data.question),
           ),
         );
       } catch (error) {
