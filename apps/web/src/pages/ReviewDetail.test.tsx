@@ -31,7 +31,13 @@ describe('Review detail', () => {
   });
 
   it('lists comments to post and previews them under their line', async () => {
+    const user = userEvent.setup();
     renderApp('/reviews/rev_draft_ready');
+    expect(
+      await screen.findByRole('heading', { name: 'Comments to post' }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/is unanchored\./)).toHaveLength(2);
+    await user.click(screen.getByRole('tab', { name: /Changes/ }));
     const file = await screen.findByRole('region', {
       name: 'src/routes/refunds.ts',
     });
@@ -39,15 +45,11 @@ describe('Review detail', () => {
       await within(file).findByText(/missing/, { selector: 'p' }),
     ).toBeInTheDocument();
     expect(within(file).getAllByRole('article')).toHaveLength(3);
-    expect(screen.getAllByText(/is unanchored\./)).toHaveLength(2);
-    expect(
-      screen.getByRole('heading', { name: 'Comments to post' }),
-    ).toBeInTheDocument();
   });
 
   it('shows binary placeholder and collapses files without hunks', async () => {
     const user = userEvent.setup();
-    renderApp('/reviews/rev_draft_ready');
+    renderApp('/reviews/rev_draft_ready?tab=changes');
     const binary = await screen.findByRole('region', {
       name: 'assets/logo.png',
     });
@@ -77,7 +79,7 @@ describe('Review detail', () => {
         });
       }),
     );
-    renderApp('/reviews/rev_draft_ready');
+    renderApp('/reviews/rev_draft_ready?tab=changes');
     await user.click(
       await screen.findByRole('button', { name: 'Add comment on line 13' }),
     );
@@ -130,7 +132,10 @@ describe('Review detail', () => {
       }),
     );
     renderApp('/reviews/rev_draft_ready');
-    const summary = await screen.findByLabelText('Summary');
+    await user.click(
+      await screen.findByRole('button', { name: 'Edit summary' }),
+    );
+    const summary = screen.getByLabelText('Summary');
     await user.clear(summary);
     await user.type(summary, 'Looks fine');
     await user.tab();
@@ -140,7 +145,8 @@ describe('Review detail', () => {
   it('is read-only once published', async () => {
     renderApp('/reviews/rev_published_pending');
     expect(await screen.findByText(/read-only/)).toBeInTheDocument();
-    expect(screen.getByLabelText('Summary')).toHaveAttribute('readonly');
+    expect(screen.queryByRole('button', { name: 'Edit summary' })).toBeNull();
+    expect(screen.queryByLabelText('Summary')).toBeNull();
     expect(screen.getByLabelText('Verdict')).toBeDisabled();
     expect(screen.queryByRole('button', { name: /Add comment on/ })).toBeNull();
     expect(screen.queryByRole('combobox', { name: 'Severity' })).toBeNull();
@@ -157,7 +163,9 @@ describe('Review detail', () => {
     expect(
       screen.getByRole('button', { name: 'Re-run review' }),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText('Summary')).not.toHaveAttribute('readonly');
+    expect(
+      screen.getByRole('button', { name: 'Edit summary' }),
+    ).toBeInTheDocument();
   });
 
   it('shows progress while generating', async () => {
@@ -181,7 +189,9 @@ describe('Review detail', () => {
         data: reviewSummary('draft_ready', { id: 'rev_reviewing' }),
       }),
     );
-    expect(await screen.findByLabelText('Summary')).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Summary' }),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/Review is reviewing/)).toBeNull();
   });
 
@@ -207,7 +217,7 @@ describe('Review detail', () => {
     await user.keyboard('k');
     expect(cards[0]).toHaveFocus();
 
-    await user.click(screen.getByLabelText('Summary'));
+    await user.click(screen.getByRole('button', { name: 'Edit summary' }));
     await user.keyboard('j');
     expect(screen.getByLabelText('Summary')).toHaveFocus();
   });
@@ -222,8 +232,10 @@ describe('Review detail', () => {
       }),
     );
     renderApp('/reviews/rev_draft_ready');
-    const summary = await screen.findByLabelText('Summary');
-    await user.click(summary);
+    await user.click(
+      await screen.findByRole('button', { name: 'Edit summary' }),
+    );
+    const summary = screen.getByLabelText('Summary');
     await user.type(summary, '!');
     await user.keyboard('{Meta>}{Enter}{/Meta}');
     await waitFor(() =>
@@ -240,7 +252,7 @@ describe('Review detail', () => {
         return HttpResponse.json({});
       }),
     );
-    renderApp('/reviews/rev_draft_ready');
+    renderApp('/reviews/rev_draft_ready?tab=changes');
     await user.click(
       await screen.findByRole('button', { name: 'Add comment on line 13' }),
     );
@@ -265,7 +277,7 @@ describe('Review detail', () => {
     server.use(
       http.get('/api/reviews/:id/diff', () => HttpResponse.json(many)),
     );
-    renderApp('/reviews/rev_draft_ready');
+    renderApp('/reviews/rev_draft_ready?tab=changes');
     const commented = await screen.findByRole('region', {
       name: 'src/routes/refunds.ts',
     });
@@ -291,7 +303,7 @@ describe('Review detail', () => {
     server.use(
       http.get('/api/reviews/:id/diff', () => HttpResponse.json(many)),
     );
-    renderApp('/reviews/rev_draft_ready');
+    renderApp('/reviews/rev_draft_ready?tab=changes');
     const index = await screen.findByRole('navigation', {
       name: 'Changed files',
     });
@@ -309,7 +321,7 @@ describe('Review detail', () => {
     await user.clear(within(index).getByLabelText('Filter files'));
     await user.click(within(index).getByLabelText('With comments'));
     expect(within(index).getAllByRole('button')).toHaveLength(1);
-    expect(within(index).getByRole('button')).toHaveTextContent(
+    expect(within(index).getByRole('button')).toHaveAccessibleName(
       'src/routes/refunds.ts',
     );
   });
@@ -342,17 +354,79 @@ describe('Review detail', () => {
   });
 });
 
+describe('PR status and questions', () => {
+  it('shows merge status, GitHub comments and reviews, and CI checks', async () => {
+    renderApp('/reviews/rev_draft_ready');
+    expect(await screen.findByText('Merge conflicts')).toBeInTheDocument();
+    expect(screen.getByText('2 comments')).toBeInTheDocument();
+    const reviews = within(
+      screen.getByRole('list', { name: 'GitHub reviews' }),
+    );
+    expect(reviews.getByText('hubot')).toBeInTheDocument();
+    expect(reviews.getByText('changes requested')).toBeInTheDocument();
+    const checks = within(screen.getByRole('list', { name: 'CI checks' }));
+    expect(checks.getAllByRole('listitem')).toHaveLength(3);
+    expect(
+      checks.getByRole('link', { name: 'integration (1/3)' }),
+    ).toHaveAttribute('href', 'https://ci.example/1');
+  });
+
+  it('answers a question about the PR without touching the review', async () => {
+    const user = userEvent.setup();
+    let sent: unknown;
+    server.use(
+      http.post('/api/reviews/:id/ask', async ({ request }) => {
+        sent = await request.json();
+        return HttpResponse.json({ answer: 'It adds **refunds**.' });
+      }),
+    );
+    renderApp('/reviews/rev_draft_ready');
+    const box = await screen.findByLabelText('Ask about this pull request');
+    expect(screen.getByRole('button', { name: 'Ask' })).toBeDisabled();
+    await user.type(box, 'What changed?{Enter}');
+    const answer = await screen.findByRole('region', { name: 'Answer' });
+    expect(within(answer).getByText('refunds')).toBeInTheDocument();
+    expect(sent).toEqual({ question: 'What changed?' });
+    expect(box).toHaveValue('');
+    await user.click(
+      within(answer).getByRole('button', { name: 'Close answer' }),
+    );
+    expect(screen.queryByRole('region', { name: 'Answer' })).toBeNull();
+  });
+
+  it('shows why a question failed and keeps it for retrying', async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.post('/api/reviews/:id/ask', () =>
+        HttpResponse.json(
+          { error: { code: 'LLM_FAILED', message: 'The model timed out.' } },
+          { status: 502 },
+        ),
+      ),
+    );
+    renderApp('/reviews/rev_draft_ready');
+    await user.type(
+      await screen.findByLabelText('Ask about this pull request'),
+      'Why?{Enter}',
+    );
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The model timed out.',
+    );
+    expect(screen.getByLabelText('Ask about this pull request')).toHaveValue(
+      'Why?',
+    );
+  });
+});
+
 describe('Review a PR by URL', () => {
   it('creates a review and opens it', async () => {
     const user = userEvent.setup();
     const router = renderApp('/');
-    const submit = await screen.findByRole('button', { name: 'Review' });
-    expect(submit).toBeDisabled();
+    const box = await screen.findByLabelText('Search or paste a PR link');
     await user.type(
-      screen.getByLabelText('Pull request URL'),
-      'https://github.com/acme/payments-api/pull/128',
+      box,
+      'https://github.com/acme/payments-api/pull/128{Enter}',
     );
-    await user.click(submit);
     await waitFor(() =>
       expect(router.state.location.pathname).toBe('/reviews/rev_new'),
     );
@@ -368,15 +442,11 @@ describe('Review a PR by URL', () => {
     );
     renderApp('/');
     await user.type(
-      await screen.findByLabelText('Pull request URL'),
-      'https://github.com/acme/payments-api/pull/1',
+      await screen.findByLabelText('Search or paste a PR link'),
+      'https://github.com/acme/payments-api/pull/1{Enter}',
     );
-    await user.click(screen.getByRole('button', { name: 'Review' }));
-    expect(
-      await screen.findByRole('button', { name: 'Reviewing…' }),
-    ).toBeDisabled();
-    expect(screen.getByLabelText('Pull request URL')).toBeDisabled();
-    expect(screen.getByText(/can take a minute or two/)).toBeInTheDocument();
+    expect(await screen.findByText(/can take a minute or two/)).toBeVisible();
+    expect(screen.getByLabelText('Search or paste a PR link')).toBeDisabled();
   });
 
   it('shows the backend error', async () => {
@@ -391,10 +461,9 @@ describe('Review a PR by URL', () => {
     );
     renderApp('/');
     await user.type(
-      await screen.findByLabelText('Pull request URL'),
-      'https://github.com/acme/payments-api/pull/1',
+      await screen.findByLabelText('Search or paste a PR link'),
+      'https://github.com/acme/payments-api/pull/1{Enter}',
     );
-    await user.click(screen.getByRole('button', { name: 'Review' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('gh auth login');
   });
 });

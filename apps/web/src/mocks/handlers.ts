@@ -109,6 +109,13 @@ export const handlers: HttpHandler[] = [
       });
     }),
   ),
+  http.post(
+    '/api/reviews/:id/ask',
+    route(async ({ request }) => {
+      const { question } = (await request.json()) as { question: string };
+      return HttpResponse.json({ answer: `Mock answer to: ${question}` });
+    }),
+  ),
   http.get(
     '/api/projects/template',
     route(({ request }) => {

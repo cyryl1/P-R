@@ -28,7 +28,7 @@ import type {
 
 export class ApiError extends Error {
   constructor(
-    public readonly code: ErrorCode | 'NETWORK',
+    public readonly code: ErrorCode | 'LLM_FAILED' | 'NETWORK',
     message: string,
     public readonly status: number,
     public readonly details?: unknown,
@@ -71,9 +71,16 @@ async function request<T>(
   }
 
   if (!res.ok) {
-    const parsed = ApiErrorSchema.safeParse(
-      await res.json().catch(() => undefined),
-    );
+    const body: unknown = await res.json().catch(() => undefined);
+    const parsed = ApiErrorSchema.safeParse(body);
+    // LLM_FAILED is only in the endpoint-specific error schemas, not the shared code list.
+    const llm = ApiSchemas.reviews.askError.safeParse(body);
+    if (llm.success)
+      throw new ApiError(
+        llm.data.error.code,
+        llm.data.error.message,
+        res.status,
+      );
     if (parsed.success) {
       const { code, message, details } = parsed.data.error;
       throw new ApiError(code, message, res.status, details);
@@ -154,6 +161,11 @@ export const api = {
   review: (id: string) =>
     request<ReviewDetail>('GET', `/reviews/${id}`, {
       schema: ApiSchemas.reviews.detail,
+    }),
+  askReview: (id: string, question: string) =>
+    request<{ answer: string }>('POST', `/reviews/${id}/ask`, {
+      body: { question },
+      schema: ApiSchemas.reviews.askResponse,
     }),
   reviewDiff: (id: string) =>
     request<DiffFile[]>('GET', `/reviews/${id}/diff`, {

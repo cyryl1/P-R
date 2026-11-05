@@ -142,6 +142,18 @@ export function reviewDetail(status: ReviewStatus): ReviewDetail {
       headRef: 'feat/refunds',
       additions: 120,
       deletions: 14,
+      mergeable: 'conflicting',
+      checks: [
+        { name: 'build', state: 'success' },
+        {
+          name: 'integration (1/3)',
+          state: 'failure',
+          url: 'https://ci.example/1',
+        },
+        { name: 'deploy preview', state: 'pending' },
+      ],
+      githubComments: 2,
+      githubReviews: [{ author: 'hubot', state: 'CHANGES_REQUESTED' }],
     },
     summary: hasDraft
       ? 'Refund endpoint works but is missing auth and uses floats for money.'
@@ -404,6 +416,7 @@ export const inbox: InboxItem[] = [
     pr: pr(129, 'acme/payments-api', 'Fix rounding in invoices', {
       headSha: 'ffff0000aaaa',
     }),
+    relation: 'authored',
     rulesState: 'ok',
     latestReview: reviewSummary('stale', { number: 129 }),
     isStale: true,
@@ -425,6 +438,7 @@ export const inbox: InboxItem[] = [
   },
   {
     pr: pr(3, 'acme/legacy', 'Remove dead code'),
+    relation: 'team_review_requested',
     rulesState: 'disabled',
     isStale: false,
   },

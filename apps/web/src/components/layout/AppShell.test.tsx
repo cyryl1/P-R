@@ -1,11 +1,13 @@
 import { QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { makeQueryClient } from '@/App';
 import { healthGhLoggedOut, healthNoKey } from '@/mocks/fixtures';
 import { server } from '@/mocks/server';
+import { renderApp as renderAppWithRouter } from '@/test-utils';
 import { routes } from '@/routes';
 
 function renderApp(path = '/') {
@@ -21,11 +23,41 @@ describe('AppShell', () => {
   it('shows the sidebar routes and a placeholder page', async () => {
     renderApp('/history');
     const nav = screen.getByRole('navigation', { name: 'Main' });
-    for (const name of ['Inbox', 'Projects', 'History', 'Settings'])
+    for (const name of ['Reviews', 'Projects', 'History', 'Settings'])
       expect(nav).toHaveTextContent(name);
     expect(
       await screen.findByRole('heading', { name: 'History' }),
     ).toBeInTheDocument();
+  });
+
+  it('lists pull requests beside a review, grouped, and filters them', async () => {
+    const user = userEvent.setup();
+    renderApp('/reviews/rev_draft_ready');
+    const side = await screen.findByRole('complementary', {
+      name: 'Pull requests',
+    });
+    expect(await within(side).findByText('Add refund endpoint')).toBeVisible();
+    expect(within(side).getByText('Needs my review')).toBeInTheDocument();
+    expect(within(side).getByText('Authored by me')).toBeInTheDocument();
+    expect(
+      within(side).getByText("Needs my team's review"),
+    ).toBeInTheDocument();
+    expect(
+      within(side).getByRole('link', { name: /Add refund endpoint/ }),
+    ).toHaveAttribute('href', '/reviews/rev_draft_ready');
+    await user.type(
+      within(side).getByLabelText('Search or paste a PR link'),
+      'webhooks',
+    );
+    expect(within(side).queryByText('Add refund endpoint')).toBeNull();
+    expect(within(side).getByText('WIP: webhooks')).toBeInTheDocument();
+  });
+
+  it('opens the newest PR that needs attention from the home route', async () => {
+    const router = renderAppWithRouter('/');
+    await waitFor(() =>
+      expect(router.state.location.pathname).toMatch(/^\/reviews\//),
+    );
   });
 
   it('shows the poll indicator from /api/health', async () => {

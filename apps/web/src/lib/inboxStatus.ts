@@ -125,3 +125,31 @@ export function inboxRowState(item: InboxItem): InboxRowState {
       };
   }
 }
+
+const DONE_STATUSES: ReviewStatus[] = [
+  'published_pending',
+  'submitted',
+  'dismissed',
+];
+export const isDone = (item: InboxItem) =>
+  !!item.latestReview && DONE_STATUSES.includes(item.latestReview.status);
+
+/** Where an inbox item leads: its review, or the rules page when rules block it. */
+export function itemLink(item: InboxItem): string | undefined {
+  if (item.rulesState !== 'ok') return `/projects/${item.pr.repo}`;
+  return item.latestReview ? `/reviews/${item.latestReview.id}` : undefined;
+}
+
+/** The review the landing page opens: newest PR that still needs attention. */
+export function reviewTarget(items: InboxItem[]): string | undefined {
+  return [...items]
+    .sort((a, b) => b.pr.updatedAt.localeCompare(a.pr.updatedAt))
+    .filter(
+      (i) =>
+        i.relation !== 'authored' &&
+        i.rulesState === 'ok' &&
+        i.latestReview &&
+        !isDone(i),
+    )
+    .map(itemLink)[0];
+}

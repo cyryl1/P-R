@@ -154,6 +154,13 @@ export function useRerunReview(id: string) {
   });
 }
 
+/** Answers are not stored anywhere; the caller shows the latest one. */
+export function useAskReview(id: string) {
+  return useMutation({
+    mutationFn: (question: string) => api.askReview(id, question),
+  });
+}
+
 export function useDismissReview(id: string) {
   const qc = useQueryClient();
   return useMutation({
