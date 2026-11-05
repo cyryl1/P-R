@@ -2,6 +2,7 @@ import { Navigate } from 'react-router-dom';
 import { useHealth, useInbox } from '@/api/hooks';
 import { ErrorState, LoadingState } from '@/components/ErrorState';
 import { formatRelative } from '@/lib/utils';
+import { useProject } from '@/components/layout/ProjectContext';
 import { reviewTarget } from '@/lib/inboxStatus';
 
 const isDesktop = () =>
@@ -12,6 +13,7 @@ const isDesktop = () =>
 export function Home() {
   const inbox = useInbox();
   const health = useHealth();
+  const { project, items } = useProject();
   if (inbox.isPending)
     return (
       <div className="p-4 md:p-8">
@@ -24,15 +26,17 @@ export function Home() {
         <ErrorState error={inbox.error} onRetry={() => inbox.refetch()} />
       </div>
     );
-  const target = reviewTarget(inbox.data);
+  const target = reviewTarget(items);
   if (target && isDesktop()) return <Navigate to={target} replace />;
   return (
     <div className="p-4 md:p-8">
       <div className="rounded-lg border border-border p-8 text-center">
         <p className="font-medium">
-          {inbox.data.length
+          {items.length
             ? 'Pick a pull request from the list'
-            : 'Nothing is waiting on you'}
+            : project
+              ? `Nothing is waiting on you in ${project}`
+              : 'Nothing is waiting on you'}
         </p>
         <p className="text-sm text-muted-foreground">
           Last checked {formatRelative(health.data?.poller.lastRunAt)}. Paste a

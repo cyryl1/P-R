@@ -140,16 +140,21 @@ export function itemLink(item: InboxItem): string | undefined {
   return item.latestReview ? `/reviews/${item.latestReview.id}` : undefined;
 }
 
-/** The review the landing page opens: newest PR that still needs attention. */
-export function reviewTarget(items: InboxItem[]): string | undefined {
+/** The PR that most needs attention: newest with a review that is not finished. */
+export function nextToReview(items: InboxItem[]): InboxItem | undefined {
   return [...items]
     .sort((a, b) => b.pr.updatedAt.localeCompare(a.pr.updatedAt))
-    .filter(
+    .find(
       (i) =>
         i.relation !== 'authored' &&
         i.rulesState === 'ok' &&
         i.latestReview &&
         !isDone(i),
-    )
-    .map(itemLink)[0];
+    );
+}
+
+/** The review the landing page opens. */
+export function reviewTarget(items: InboxItem[]): string | undefined {
+  const next = nextToReview(items);
+  return next && itemLink(next);
 }

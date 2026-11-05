@@ -3,12 +3,25 @@ import { cleanup, configure } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll } from 'vitest';
 import { server } from '@/mocks/server';
 
+// Node's experimental localStorage global can shadow jsdom's; use a plain in-memory one.
+const store = new Map<string, string>();
+Object.defineProperty(globalThis, 'localStorage', {
+  configurable: true,
+  value: {
+    getItem: (k: string) => store.get(k) ?? null,
+    setItem: (k: string, v: string) => void store.set(k, String(v)),
+    removeItem: (k: string) => void store.delete(k),
+    clear: () => store.clear(),
+  },
+});
+
 // CI runners are slower than dev machines; the 1 s default made async queries flaky there.
 configure({ asyncUtilTimeout: 5_000 });
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => {
   cleanup();
+  localStorage.clear();
   server.resetHandlers();
 });
 afterAll(() => server.close());

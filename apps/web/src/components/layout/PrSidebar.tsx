@@ -1,8 +1,9 @@
 import type { InboxItem } from '@pr-reviewer/shared';
-import { Loader2, Search } from 'lucide-react';
+import { ChevronsUpDown, FolderGit2, Loader2, Search } from 'lucide-react';
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useCreateReview, useInbox } from '@/api/hooks';
+import { useProject } from './ProjectContext';
 import { errorMessage } from '@/components/ErrorState';
 import { Avatar } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -88,13 +89,14 @@ function Group({ title, items }: { title: string; items: InboxItem[] }) {
 /** Pull requests list beside the review page; the search box also takes a pasted PR URL. */
 export function PrSidebar({ fullOnMobile }: { fullOnMobile: boolean }) {
   const inbox = useInbox();
+  const { project, projects, setProject, items: projectItems } = useProject();
   const create = useCreateReview();
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const text = query.trim();
   const isUrl = PR_URL.test(text);
 
-  const items = [...(inbox.data ?? [])]
+  const items = [...projectItems]
     .sort(
       (a, b) =>
         new Date(b.pr.updatedAt).getTime() - new Date(a.pr.updatedAt).getTime(),
@@ -121,6 +123,34 @@ export function PrSidebar({ fullOnMobile }: { fullOnMobile: boolean }) {
       )}
     >
       <h2 className="px-2 pt-1 text-lg font-semibold">Code Review</h2>
+      <div className="relative">
+        <FolderGit2
+          className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground"
+          aria-hidden
+        />
+        <ChevronsUpDown
+          className="pointer-events-none absolute right-3 top-2.5 h-4 w-4 text-muted-foreground"
+          aria-hidden
+        />
+        <select
+          aria-label="Project"
+          value={project ?? ''}
+          disabled={!projects.length}
+          onChange={(e) => {
+            setProject(e.target.value);
+            navigate('/');
+          }}
+          className="h-9 w-full appearance-none rounded-lg border border-border bg-background pl-9 pr-8 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        >
+          {projects.length ? null : <option value="">No projects</option>}
+          {projects.map((p) => (
+            <option key={p.repo} value={p.repo}>
+              {p.repo}
+              {p.waiting ? ` (${p.waiting})` : ''}
+            </option>
+          ))}
+        </select>
+      </div>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -181,7 +211,9 @@ export function PrSidebar({ fullOnMobile }: { fullOnMobile: boolean }) {
           />
           {items.length === 0 ? (
             <p className="px-3 text-sm text-muted-foreground">
-              No pull requests match.
+              {text
+                ? 'No pull requests match.'
+                : `No open pull requests in ${project ?? 'this project'}.`}
             </p>
           ) : null}
         </>
