@@ -59,6 +59,13 @@ export type GhReviewPayload = {
     body: string;
   }>;
 };
+export type GhIssueComment = {
+  id: string;
+  url: string;
+  body: string;
+  author: string;
+  createdAt: string;
+};
 
 export interface GhClient {
   authStatus(): Promise<GhAuthStatus>;
@@ -75,6 +82,11 @@ export interface GhClient {
     number: number,
     payload: GhReviewPayload,
   ): Promise<GhReview>;
+  createIssueComment(
+    repo: string,
+    number: number,
+    body: string,
+  ): Promise<GhIssueComment>;
   submitReview(
     repo: string,
     number: number,
@@ -127,6 +139,13 @@ type RawGhPr = Omit<
     detailsUrl?: string | null;
     targetUrl?: string | null;
   }>;
+};
+type RawGhIssueComment = {
+  id: number | string;
+  html_url: string;
+  body: string;
+  user?: { login?: string } | null;
+  created_at: string;
 };
 
 const checkState = (
@@ -250,6 +269,28 @@ export function createGhClient(run: GhRun = runGh): GhClient {
           { input: JSON.stringify(payload) },
         ),
       );
+    },
+    async createIssueComment(repo, number, body) {
+      const comment = parseJson<RawGhIssueComment>(
+        await run(
+          [
+            'api',
+            `repos/${repoArg(repo)}/issues/${number}/comments`,
+            '-X',
+            'POST',
+            '--input',
+            '-',
+          ],
+          { input: JSON.stringify({ body }) },
+        ),
+      );
+      return {
+        id: String(comment.id),
+        url: comment.html_url,
+        body: comment.body,
+        author: comment.user?.login ?? 'unknown',
+        createdAt: comment.created_at,
+      };
     },
     async submitReview(repo, number, id, event, body) {
       return parseJson<GhReview>(

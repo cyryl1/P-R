@@ -52,6 +52,13 @@ const gh: GhClient = {
   getFile: async () => 'Review carefully.',
   listReviews: async () => [],
   createReview: async () => ({ id: 1, state: 'PENDING' }),
+  createIssueComment: vi.fn(async (_repo, _number, body) => ({
+    id: '88',
+    url: 'https://github.com/acme/billing/pull/7#issuecomment-88',
+    body,
+    author: 'octo',
+    createdAt: '2026-11-05T12:00:00Z',
+  })),
   submitReview: async () => ({ id: 1, state: 'COMMENTED' }),
   deletePendingReview: async () => undefined,
 };
@@ -59,6 +66,7 @@ const gh: GhClient = {
 const databases: ReviewDatabase[] = [];
 afterEach(() => {
   for (const database of databases.splice(0)) database.close();
+  vi.clearAllMocks();
 });
 
 async function fixture() {
@@ -217,6 +225,34 @@ describe('review orchestration', () => {
     expect(askResponse.json()).toEqual({
       answer: 'The mock provider cannot analyze the pull request.',
     });
+    const unconfirmedComment = await app.inject({
+      method: 'POST',
+      url: `/api/reviews/${summary.id}/github-comments`,
+      headers: { host: 'localhost' },
+      payload: { body: 'Please clarify this behavior.' },
+    });
+    expect(unconfirmedComment.statusCode).toBe(400);
+    expect(gh.createIssueComment).not.toHaveBeenCalled();
+    const commentResponse = await app.inject({
+      method: 'POST',
+      url: `/api/reviews/${summary.id}/github-comments`,
+      headers: { host: 'localhost' },
+      payload: { body: 'Please clarify this behavior.', confirm: true },
+    });
+    expect(commentResponse.statusCode).toBe(200);
+    expect(commentResponse.json()).toEqual({
+      id: '88',
+      url: 'https://github.com/acme/billing/pull/7#issuecomment-88',
+      body: 'Please clarify this behavior.',
+      author: 'octo',
+      createdAt: '2026-11-05T12:00:00Z',
+    });
+    expect(gh.createIssueComment).toHaveBeenCalledWith(
+      'acme/billing',
+      7,
+      'Please clarify this behavior.',
+    );
+    expect(service.get(summary.id).pr.githubComments).toBe(1);
     const patch = await app.inject({
       method: 'PATCH',
       url: `/api/reviews/${summary.id}`,

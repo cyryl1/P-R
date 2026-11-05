@@ -183,6 +183,31 @@ export function registerReviewRoutes(
   );
 
   app.post<{ Params: { id: string } }>(
+    '/api/reviews/:id/github-comments',
+    async (request, reply) => {
+      const body = ApiSchemas.reviews.githubComment.safeParse(request.body);
+      if (!body.success)
+        return reply
+          .code(400)
+          .send(
+            apiError(
+              'VALIDATION_ERROR',
+              'A non-empty comment and explicit confirmation are required',
+            ),
+          );
+      try {
+        return reply.send(
+          ApiSchemas.reviews.githubCommentResponse.parse(
+            await reviews.postGithubComment(request.params.id, body.data.body),
+          ),
+        );
+      } catch (error) {
+        return sendError(reply, error);
+      }
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
     '/api/reviews/:id/comments',
     async (request, reply) => {
       const body = ApiSchemas.reviews.addComment.safeParse(request.body);

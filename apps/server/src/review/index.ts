@@ -349,6 +349,27 @@ export class ReviewService {
     }
   }
 
+  async postGithubComment(id: string, body: string) {
+    const review = this.requireReview(id);
+    const comment = await this.gh.createIssueComment(
+      review.repo,
+      review.number,
+      body,
+    );
+    try {
+      await this.database.incrementGithubCommentCount(id);
+      await this.database.addActivity({
+        level: 'info',
+        type: 'github.comment.created',
+        message: `Commented on ${review.repo}#${review.number}`,
+        reviewId: id,
+      });
+    } catch {
+      // The public comment already exists. Local bookkeeping must not invite a duplicate retry.
+    }
+    return comment;
+  }
+
   async edit(
     id: string,
     patch: { summary?: string; verdict?: ReviewDetail['verdict'] },

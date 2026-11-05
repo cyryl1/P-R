@@ -168,5 +168,16 @@ describe('shared contract', () => {
     expect(
       ApiSchemas.reviews.askResponse.parse({ answer: 'The API changed.' }),
     ).toEqual({ answer: 'The API changed.' });
+    expect(
+      ApiSchemas.reviews.githubComment.safeParse({
+        body: 'Please add a regression test.',
+        confirm: true,
+      }).success,
+    ).toBe(true);
+    expect(
+      ApiSchemas.reviews.githubComment.safeParse({
+        body: 'Please add a regression test.',
+      }).success,
+    ).toBe(false);
   });
 });

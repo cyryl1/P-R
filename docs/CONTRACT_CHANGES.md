@@ -20,6 +20,10 @@ The review page is being reshaped like a PR review app (PR list sidebar, status 
 2. **Merge status and checks.** Add to `ReviewDetail.pr`: `mergeable: 'mergeable' | 'conflicting' | 'unknown'`, `checks: [{name, state: 'pending'|'success'|'failure', url?}]`, and `githubComments: number`, `githubReviews: [{author, state}]`.
 3. **Ask about this PR.** `POST /api/reviews/:id/ask`, body `{question: string}`, response `{answer: string}`. The server answers from the PR, diff and rules using the configured LLM; nothing is saved or posted to GitHub. Errors: `LLM_NOT_CONFIGURED`, `LLM_FAILED`.
 
+### Direct PR conversation comments (requested by the user)
+
+Add `POST /api/reviews/:id/github-comments`, body `{body: string, confirm: true}`, response `{id, url, body, author, createdAt}`. This is the backend for a "Leave a comment" composer below the PR review. Unlike draft review comments, it posts a public GitHub PR conversation comment immediately, so the UI must show an explicit confirmation before sending `confirm: true`.
+
 ## Applied changes
 
 ### Phase 1 — 2026-10-25
@@ -53,3 +57,8 @@ The review page is being reshaped like a PR review app (PR list sidebar, status 
 1. Added backward-compatible `relation` data to inbox items and persisted PRs. Inbox and poll refreshes now combine direct review requests, authored PRs, and team review requests; team requests are identified from the broad review-requested result after direct requests are removed. The server always supplies the field, while the contract keeps it optional so the backend can merge before the corresponding UI update.
 2. Added backward-compatible normalized mergeability, check status, GitHub comment count, and GitHub review author/state data to `ReviewDetail.pr`. Existing databases add the required PR columns on startup. The server always supplies these fields, while the contract keeps them optional for the independent UI rollout.
 3. Added `POST /api/reviews/:id/ask` with `{question}` and `{answer}` schemas plus endpoint-specific `LLM_NOT_CONFIGURED` and `LLM_FAILED` errors. It uses the configured provider with the saved valid rules snapshot and stored diff, treats all PR content as untrusted, and neither saves nor posts the answer.
+
+### Direct PR conversation comments — 2026-11-05
+
+1. Added `POST /api/reviews/:id/github-comments` with a required non-empty body and literal `confirm: true`. The server posts through `gh api` using a JSON payload on stdin and returns normalized comment metadata.
+2. Successful posts increment the local GitHub comment count and add an activity entry. Local bookkeeping is best-effort after GitHub succeeds so a local failure cannot encourage a duplicate public comment.
