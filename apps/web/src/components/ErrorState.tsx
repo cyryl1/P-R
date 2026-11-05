@@ -3,13 +3,15 @@ import { ApiError } from '@/api/client';
 import { Button } from '@/components/ui/button';
 
 /** Replaces the server text where the fix is something the user does outside the app. */
-const overrides: Partial<Record<ErrorCode | 'NETWORK', string>> = {
-  NETWORK: 'Cannot reach the backend. Is `pnpm dev` running?',
-  GH_NOT_AUTHENTICATED: 'Run `gh auth login`, then try again.',
-  GH_RATE_LIMITED: 'GitHub is rate limiting requests. Wait a minute and retry.',
-  LLM_NOT_CONFIGURED:
-    'Add OPENROUTER_API_KEY to .env, or switch the provider to mock in Settings.',
-};
+const overrides: Partial<Record<ErrorCode | 'LLM_FAILED' | 'NETWORK', string>> =
+  {
+    NETWORK: 'Cannot reach the backend. Is `pnpm dev` running?',
+    GH_NOT_AUTHENTICATED: 'Run `gh auth login`, then try again.',
+    GH_RATE_LIMITED:
+      'GitHub is rate limiting requests. Wait a minute and retry.',
+    LLM_NOT_CONFIGURED:
+      'Add OPENROUTER_API_KEY to .env, or switch the provider to mock in Settings.',
+  };
 
 /** Appended to the server's own message to say what to do next. */
 const nextSteps: Partial<Record<ErrorCode, string>> = {
@@ -26,7 +28,10 @@ export function errorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     const override = overrides[error.code];
     if (override) return override;
-    const next = error.code === 'NETWORK' ? undefined : nextSteps[error.code];
+    const next =
+      error.code === 'NETWORK' || error.code === 'LLM_FAILED'
+        ? undefined
+        : nextSteps[error.code];
     return next ? `${error.message} ${next}` : error.message;
   }
   return error instanceof Error ? error.message : 'Something went wrong.';

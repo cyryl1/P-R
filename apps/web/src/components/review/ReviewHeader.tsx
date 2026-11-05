@@ -1,26 +1,28 @@
 import type { ReviewDetail } from '@pr-reviewer/shared';
-import { ExternalLink } from 'lucide-react';
-import { StatusBadge } from './StatusBadge';
+import { ArrowRight } from 'lucide-react';
+import { Avatar } from '@/components/ui/avatar';
+import { formatRelative } from '@/lib/utils';
 
 export function ReviewHeader({ review }: { review: ReviewDetail }) {
   const { pr, llmMeta } = review;
   return (
-    <header className="space-y-1">
-      <div className="flex items-center gap-3">
-        <h1 className="text-xl font-semibold">{pr.title}</h1>
-        <StatusBadge status={review.status} />
-      </div>
-      <p className="text-sm text-muted-foreground">
-        {review.repo}#{review.number} · {pr.author} · {pr.headRef} →{' '}
-        {pr.baseRef} · <code>{review.headSha.slice(0, 7)}</code> ·{' '}
-        <a
-          href={pr.url}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1 underline"
-        >
-          GitHub <ExternalLink className="h-3 w-3" />
-        </a>
+    <header className="space-y-2">
+      <h1 className="text-3xl font-semibold leading-tight tracking-tight">
+        {pr.title}
+      </h1>
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+        <Avatar name={pr.author} />
+        <span className="font-medium text-foreground">{pr.author}</span>
+        <span>{formatRelative(review.createdAt)}</span>·
+        <span>
+          {review.repo}#{review.number}
+        </span>
+        ·
+        <span className="inline-flex items-center gap-1">
+          {pr.headRef} <ArrowRight className="h-3 w-3" aria-hidden />{' '}
+          {pr.baseRef}
+        </span>
+        ·<code>{review.headSha.slice(0, 7)}</code>
       </p>
       {llmMeta ? (
         <p className="text-xs text-muted-foreground">

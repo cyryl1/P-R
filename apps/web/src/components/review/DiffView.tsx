@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { AddCommentForm } from './AddCommentForm';
-import { FileIndex } from './FileIndex';
+import { FileTree } from './FileTree';
 import { CommentCard } from './CommentCard';
 
 const LARGE_DIFF_FILES = 8;
@@ -22,8 +22,8 @@ function anchorOf(line: Line): { line: number; side: DiffSide } | undefined {
 }
 
 const rowTint = {
-  add: 'bg-success/15',
-  del: 'bg-destructive/15',
+  add: 'bg-success/40 shadow-[inset_3px_0_0_hsl(142_60%_40%)]',
+  del: 'bg-destructive/15 shadow-[inset_3px_0_0_hsl(var(--destructive))]',
   context: '',
 } as const;
 const marker = { add: '+', del: '-', context: ' ' } as const;
@@ -77,159 +77,173 @@ export function DiffView({
     );
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-6 lg:flex-row">
       {files.length > FILE_INDEX_MIN ? (
-        <FileIndex
-          files={files}
-          commentCount={(path) => inline.filter((c) => c.path === path).length}
-          onSelect={(path) => {
-            setCollapsed((c) => ({ ...c, [path]: false }));
-            setJumpTo(path);
-          }}
-        />
-      ) : null}
-      {files.length > 1 ? (
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-muted-foreground">{files.length} files</span>
-          <Button variant="ghost" size="sm" onClick={() => setAll(false)}>
-            Expand all
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => setAll(true)}>
-            Collapse all
-          </Button>
+        <div className="lg:sticky lg:top-20 lg:order-2 lg:max-h-screen lg:w-72 lg:shrink-0 lg:self-start">
+          <FileTree
+            files={files}
+            commentCount={(path) =>
+              inline.filter((c) => c.path === path).length
+            }
+            onSelect={(path) => {
+              setCollapsed((c) => ({ ...c, [path]: false }));
+              setJumpTo(path);
+            }}
+          />
         </div>
       ) : null}
-      {files.map((file) => {
-        const isCollapsed = collapsed[file.path] ?? isCollapsedByDefault(file);
-        const count = inline.filter((c) => c.path === file.path).length;
-        return (
-          <section
-            key={file.path}
-            ref={(el) => {
-              if (el) sections.current.set(file.path, el);
-              else sections.current.delete(file.path);
-            }}
-            aria-label={file.path}
-            className="rounded-md border border-border"
-          >
-            <button
-              type="button"
-              aria-expanded={!isCollapsed}
-              className="flex w-full items-center gap-2 bg-muted px-3 py-2 text-left text-sm"
-              onClick={() =>
-                setCollapsed((c) => ({ ...c, [file.path]: !isCollapsed }))
-              }
+      <div className="min-w-0 flex-1 space-y-4">
+        {files.length > 1 ? (
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-muted-foreground">{files.length} files</span>
+            <Button variant="ghost" size="sm" onClick={() => setAll(false)}>
+              Expand all
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setAll(true)}>
+              Collapse all
+            </Button>
+          </div>
+        ) : null}
+        {files.map((file) => {
+          const isCollapsed =
+            collapsed[file.path] ?? isCollapsedByDefault(file);
+          const count = inline.filter((c) => c.path === file.path).length;
+          return (
+            <section
+              key={file.path}
+              ref={(el) => {
+                if (el) sections.current.set(file.path, el);
+                else sections.current.delete(file.path);
+              }}
+              aria-label={file.path}
+              className="overflow-hidden rounded-lg border border-border"
             >
-              {isCollapsed ? (
-                <ChevronRight className="h-4 w-4" />
+              <button
+                type="button"
+                aria-expanded={!isCollapsed}
+                className="flex w-full items-center gap-2 bg-muted px-3 py-2 text-left text-sm"
+                onClick={() =>
+                  setCollapsed((c) => ({ ...c, [file.path]: !isCollapsed }))
+                }
+              >
+                {isCollapsed ? (
+                  <ChevronRight className="h-4 w-4" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
+                <span className="sr-only">
+                  {file.oldPath ? `${file.oldPath} → ` : ''}
+                  {file.path}
+                </span>
+                <span aria-hidden className="font-mono">
+                  {file.oldPath ? `${file.oldPath} → ` : ''}
+                  <span className="text-muted-foreground">
+                    {file.path.slice(0, file.path.lastIndexOf('/') + 1)}
+                  </span>
+                  {file.path.slice(file.path.lastIndexOf('/') + 1)}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  +{file.additions} −{file.deletions}
+                </span>
+                {isCollapsedByDefault(file) ? (
+                  <Badge>ignored by rules</Badge>
+                ) : null}
+                {count ? (
+                  <Badge className="ml-auto">
+                    {count} comment{count === 1 ? '' : 's'}
+                  </Badge>
+                ) : null}
+              </button>
+              {isCollapsed ? null : file.isBinary ? (
+                <p className="p-3 text-sm text-muted-foreground">
+                  Binary file not shown.
+                </p>
               ) : (
-                <ChevronDown className="h-4 w-4" />
-              )}
-              <span className="font-mono">
-                {file.oldPath ? `${file.oldPath} → ` : ''}
-                {file.path}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                +{file.additions} −{file.deletions}
-              </span>
-              {isCollapsedByDefault(file) ? (
-                <Badge>ignored by rules</Badge>
-              ) : null}
-              {count ? (
-                <Badge className="ml-auto">
-                  {count} comment{count === 1 ? '' : 's'}
-                </Badge>
-              ) : null}
-            </button>
-            {isCollapsed ? null : file.isBinary ? (
-              <p className="p-3 text-sm text-muted-foreground">
-                Binary file not shown.
-              </p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse font-mono text-xs">
-                  <tbody>
-                    {file.hunks.flatMap((hunk) => [
-                      <tr key={`${hunk.header}-h`} className="bg-muted/60">
-                        <td
-                          colSpan={4}
-                          className="px-3 py-1 text-muted-foreground"
-                        >
-                          {hunk.header}
-                        </td>
-                      </tr>,
-                      ...hunk.lines.flatMap((line, i) => {
-                        const anchor = anchorOf(line);
-                        const key = anchor
-                          ? `${file.path}:${anchor.side}:${anchor.line}`
-                          : undefined;
-                        const here = anchor
-                          ? commentsAt(file.path, anchor)
-                          : [];
-                        const rows = [
-                          <tr
-                            key={`${hunk.header}-${i}`}
-                            className={cn('group', rowTint[line.kind])}
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse font-mono text-xs">
+                    <tbody>
+                      {file.hunks.flatMap((hunk) => [
+                        <tr key={`${hunk.header}-h`} className="bg-muted/60">
+                          <td
+                            colSpan={4}
+                            className="px-3 py-1 text-muted-foreground"
                           >
-                            <td className="w-10 select-none px-1 text-right text-muted-foreground">
-                              {line.oldLine}
-                            </td>
-                            <td className="w-10 select-none px-1 text-right text-muted-foreground">
-                              {line.newLine}
-                            </td>
-                            <td className="w-6 text-center">
-                              {editable && anchor && key ? (
-                                <button
-                                  type="button"
-                                  aria-label={`Add comment on line ${anchor.line}`}
-                                  className="invisible rounded bg-primary text-primary-foreground group-hover:visible focus-visible:visible"
-                                  onClick={() => setAdding(key)}
-                                >
-                                  <Plus className="h-3 w-3" />
-                                </button>
-                              ) : null}
-                            </td>
-                            <td className="whitespace-pre-wrap break-all px-2">
-                              {marker[line.kind]}
-                              {line.text}
-                            </td>
-                          </tr>,
-                        ];
-                        if (anchor && (here.length || adding === key))
-                          rows.push(
-                            <tr key={`${hunk.header}-${i}-c`}>
-                              <td colSpan={4} className="space-y-2 p-2">
-                                {here.map((c) => (
-                                  <CommentCard
-                                    key={c.id}
-                                    reviewId={reviewId}
-                                    comment={c}
-                                    editable={false}
-                                    preview
-                                  />
-                                ))}
-                                {adding === key ? (
-                                  <AddCommentForm
-                                    reviewId={reviewId}
-                                    path={file.path}
-                                    line={anchor.line}
-                                    side={anchor.side}
-                                    onDone={() => setAdding(undefined)}
-                                  />
+                            {hunk.header}
+                          </td>
+                        </tr>,
+                        ...hunk.lines.flatMap((line, i) => {
+                          const anchor = anchorOf(line);
+                          const key = anchor
+                            ? `${file.path}:${anchor.side}:${anchor.line}`
+                            : undefined;
+                          const here = anchor
+                            ? commentsAt(file.path, anchor)
+                            : [];
+                          const rows = [
+                            <tr
+                              key={`${hunk.header}-${i}`}
+                              className={cn('group', rowTint[line.kind])}
+                            >
+                              <td className="w-10 select-none px-1 text-right text-muted-foreground">
+                                {line.oldLine}
+                              </td>
+                              <td className="w-10 select-none px-1 text-right text-muted-foreground">
+                                {line.newLine}
+                              </td>
+                              <td className="w-6 text-center">
+                                {editable && anchor && key ? (
+                                  <button
+                                    type="button"
+                                    aria-label={`Add comment on line ${anchor.line}`}
+                                    className="invisible rounded bg-primary text-primary-foreground group-hover:visible focus-visible:visible"
+                                    onClick={() => setAdding(key)}
+                                  >
+                                    <Plus className="h-3 w-3" />
+                                  </button>
                                 ) : null}
                               </td>
+                              <td className="whitespace-pre-wrap break-all px-2">
+                                {marker[line.kind]}
+                                {line.text}
+                              </td>
                             </tr>,
-                          );
-                        return rows;
-                      }),
-                    ])}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-        );
-      })}
+                          ];
+                          if (anchor && (here.length || adding === key))
+                            rows.push(
+                              <tr key={`${hunk.header}-${i}-c`}>
+                                <td colSpan={4} className="space-y-2 p-2">
+                                  {here.map((c) => (
+                                    <CommentCard
+                                      key={c.id}
+                                      reviewId={reviewId}
+                                      comment={c}
+                                      editable={false}
+                                      preview
+                                    />
+                                  ))}
+                                  {adding === key ? (
+                                    <AddCommentForm
+                                      reviewId={reviewId}
+                                      path={file.path}
+                                      line={anchor.line}
+                                      side={anchor.side}
+                                      onDone={() => setAdding(undefined)}
+                                    />
+                                  ) : null}
+                                </td>
+                              </tr>,
+                            );
+                          return rows;
+                        }),
+                      ])}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          );
+        })}
+      </div>
     </div>
   );
 }
