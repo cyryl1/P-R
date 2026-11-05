@@ -62,6 +62,7 @@ export const useReviewDiff = (id: string) =>
   useQuery({
     queryKey: keys.reviewDiff(id),
     queryFn: () => api.reviewDiff(id),
+    enabled: !!id,
   });
 const PAGE_SIZE = 20;
 
@@ -152,6 +153,15 @@ export function useRerunReview(id: string) {
   return useMutation({
     mutationFn: () => api.rerunReview(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['review'] }),
+  });
+}
+
+/** Posts a plain comment on the GitHub PR right away; the review's GitHub counts refresh after. */
+export function usePostPrComment(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: string) => api.postPrComment(id, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.review(id) }),
   });
 }
 

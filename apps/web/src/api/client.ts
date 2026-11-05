@@ -162,6 +162,15 @@ export const api = {
     request<ReviewDetail>('GET', `/reviews/${id}`, {
       schema: ApiSchemas.reviews.detail,
     }),
+  postPrComment: (id: string, body: string) =>
+    request<z.infer<typeof ApiSchemas.reviews.githubCommentResponse>>(
+      'POST',
+      `/reviews/${id}/github-comments`,
+      {
+        body: { body, confirm: true },
+        schema: ApiSchemas.reviews.githubCommentResponse,
+      },
+    ),
   askReview: (id: string, question: string) =>
     request<{ answer: string }>('POST', `/reviews/${id}/ask`, {
       body: { question },
