@@ -29,7 +29,7 @@ export function ChatBar({
     </button>
   );
   return (
-    <div className="sticky bottom-0 z-10 space-y-2 bg-gradient-to-t from-background via-background to-transparent px-4 pb-4 pt-6 md:px-8">
+    <div className="sticky bottom-0 z-10 space-y-2 border-t border-border bg-background px-4 pb-4 pt-3 md:px-8">
       <div role="tablist" aria-label="Message type" className="flex gap-1 px-1">
         {tab('ask', 'Ask about this PR')}
         {tab('comment', 'Leave a comment')}
