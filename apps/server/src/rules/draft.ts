@@ -118,7 +118,9 @@ export async function draftRules(
       continue;
     }
     if (attempt === 1)
-      return { yaml: lastYaml, valid: false, errors: validation.errors };
+      throw new LlmProviderError(
+        `The model returned invalid rules after one repair: ${validationFeedback(validation.errors)}`,
+      );
     feedback = validationFeedback(validation.errors);
   }
 
