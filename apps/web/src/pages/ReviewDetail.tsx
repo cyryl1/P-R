@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ApiError } from '@/api/client';
 import { useRerunReview, useReview, useReviewDiff } from '@/api/hooks';
 import { ErrorState, LoadingState } from '@/components/ErrorState';
-import { AskBar } from '@/components/review/AskBar';
+import { ChatBar } from '@/components/review/ChatBar';
 import { ActionBar } from '@/components/review/ActionBar';
 import { CommentList } from '@/components/review/CommentList';
 import { DiffView } from '@/components/review/DiffView';
@@ -148,7 +148,7 @@ export function ReviewDetail() {
           />
         )}
       </div>
-      <AskBar key={data.id} reviewId={data.id} />
+      <ChatBar key={data.id} reviewId={data.id} prNumber={data.number} />
     </div>
   );
 }

@@ -418,6 +418,85 @@ describe('PR status and questions', () => {
   });
 });
 
+describe('Leave a comment on the PR', () => {
+  const open = async (user: ReturnType<typeof userEvent.setup>) => {
+    renderApp('/reviews/rev_draft_ready');
+    await user.click(
+      await screen.findByRole('tab', { name: 'Leave a comment' }),
+    );
+    return screen.getByLabelText('Leave a comment', { selector: 'textarea' });
+  };
+
+  it('posts only after the confirmation dialog, then clears the box', async () => {
+    const user = userEvent.setup();
+    const sent: unknown[] = [];
+    server.use(
+      http.post('/api/reviews/:id/github-comments', async ({ request }) => {
+        const body = (await request.json()) as { body: string };
+        sent.push(body);
+        return HttpResponse.json({
+          id: 'c1',
+          url: 'https://github.com/acme/payments-api/pull/128#issuecomment-9',
+          body: body.body,
+          author: 'octocat',
+          createdAt: '2026-11-05T10:00:00Z',
+        });
+      }),
+    );
+    const box = await open(user);
+    expect(screen.getByRole('button', { name: 'Post comment' })).toBeDisabled();
+    await user.type(box, 'Looks good, one question.');
+    await user.click(screen.getByRole('button', { name: 'Post comment' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent(/immediately/);
+    expect(sent).toEqual([]);
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(sent).toEqual([]);
+    expect(box).toHaveValue('Looks good, one question.');
+
+    await user.click(screen.getByRole('button', { name: 'Post comment' }));
+    await user.click(
+      within(await screen.findByRole('dialog')).getByRole('button', {
+        name: 'Post comment',
+      }),
+    );
+    await waitFor(() =>
+      expect(sent).toEqual([
+        { body: 'Looks good, one question.', confirm: true },
+      ]),
+    );
+    expect(
+      await screen.findByRole('link', { name: /View on GitHub/ }),
+    ).toHaveAttribute(
+      'href',
+      'https://github.com/acme/payments-api/pull/128#issuecomment-9',
+    );
+    expect(box).toHaveValue('');
+  });
+
+  it('keeps the text and shows the reason when posting fails', async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.post('/api/reviews/:id/github-comments', () =>
+        HttpResponse.json(
+          { error: { code: 'GH_RATE_LIMITED', message: 'x' } },
+          { status: 429 },
+        ),
+      ),
+    );
+    const box = await open(user);
+    await user.type(box, 'Hello');
+    await user.keyboard('{Meta>}{Enter}{/Meta}');
+    await user.click(
+      within(await screen.findByRole('dialog')).getByRole('button', {
+        name: 'Post comment',
+      }),
+    );
+    expect(await screen.findByRole('alert')).toHaveTextContent('rate limiting');
+    expect(box).toHaveValue('Hello');
+  });
+});
+
 describe('Review a PR by URL', () => {
   it('creates a review and opens it', async () => {
     const user = userEvent.setup();

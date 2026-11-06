@@ -5,14 +5,14 @@ import { errorMessage } from '@/components/ErrorState';
 import { Markdown } from './Markdown';
 
 /** Ask the model about the PR. Answers are not saved and never posted to GitHub. */
-export function AskBar({ reviewId }: { reviewId: string }) {
+export function AskForm({ reviewId }: { reviewId: string }) {
   const ask = useAskReview(reviewId);
   const [question, setQuestion] = useState('');
   const [asked, setAsked] = useState('');
   const text = question.trim();
 
   return (
-    <div className="sticky bottom-0 z-10 space-y-2 bg-gradient-to-t from-background via-background to-transparent px-4 pb-4 pt-6 md:px-8">
+    <div className="space-y-2">
       {ask.data || ask.error ? (
         <section
           aria-label="Answer"

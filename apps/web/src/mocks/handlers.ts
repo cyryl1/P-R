@@ -110,6 +110,19 @@ export const handlers: HttpHandler[] = [
     }),
   ),
   http.post(
+    '/api/reviews/:id/github-comments',
+    route(async ({ request }) => {
+      const { body } = (await request.json()) as { body: string };
+      return HttpResponse.json({
+        id: 'ic_1',
+        url: 'https://github.com/acme/payments-api/pull/128#issuecomment-1',
+        body,
+        author: 'octocat',
+        createdAt: new Date().toISOString(),
+      });
+    }),
+  ),
+  http.post(
     '/api/reviews/:id/ask',
     route(async ({ request }) => {
       const { question } = (await request.json()) as { question: string };
